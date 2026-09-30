@@ -6,8 +6,22 @@ const path = require("path");
 const http = require("http");
 const { spawn } = require("child_process");
 
+const { execFileSync } = require("child_process");
+
 const fake = JSON.parse(fs.readFileSync(path.join(__dirname, ".fake.json"), "utf8"));
 const IS_WIN = process.platform === "win32";
+const IS_MAC = process.platform === "darwin";
+const DEST = IS_WIN ? path.join(process.env.ProgramFiles, "FocusGuard") : IS_MAC ? "/usr/local/focus-guard" : "/opt/focus-guard";
+
+// What the installer was told, so the same test covers default and interactive installs.
+const EXPECT = {
+  browsers: (process.env.FG_EXPECT_BROWSERS || (IS_WIN ? "brave,chrome,edge,firefox" : IS_MAC ? "brave,chrome,edge,firefox" : "brave,chrome,chromium,edge,firefox")).split(",").filter(Boolean),
+  mode: process.env.FG_EXPECT_MODE || "bo3",
+  maxGames: Number(process.env.FG_EXPECT_MAX || 3),
+  resetHour: Number(process.env.FG_EXPECT_RESET || 4),
+  blockSafari: process.env.FG_EXPECT_SAFARI === "1",
+};
+const ALL_BROWSERS = IS_WIN || IS_MAC ? ["brave", "chrome", "edge", "firefox"] : ["brave", "chrome", "chromium", "edge", "firefox"];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function request(url, body) {
@@ -69,6 +83,38 @@ function check(what, cond) {
   console.log(`ok: ${what}`);
 }
 
+function checkBrowserPolicies() {
+  for (const b of ALL_BROWSERS) {
+    const want = EXPECT.browsers.includes(b);
+    let has;
+    if (IS_WIN) {
+      const key = {
+        brave: "HKLM\\SOFTWARE\\Policies\\BraveSoftware\\Brave\\URLBlocklist",
+        chrome: "HKLM\\SOFTWARE\\Policies\\Google\\Chrome\\URLBlocklist",
+        edge: "HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge\\URLBlocklist",
+        firefox: "HKLM\\SOFTWARE\\Policies\\Mozilla\\Firefox\\WebsiteFilter\\Block",
+      }[b];
+      try {
+        has = execFileSync("reg", ["query", key]).toString().includes(b === "firefox" ? "*://*.facebook.com/*" : "facebook.com");
+      } catch (e) {
+        has = false;
+      }
+    } else if (IS_MAC) {
+      const file = path.join(DEST, "browsers", "focus-guard.mobileconfig");
+      const type = { brave: "com.brave.Browser", chrome: "com.google.Chrome", edge: "com.microsoft.Edge", firefox: "org.mozilla.firefox" }[b];
+      has = fs.existsSync(file) && fs.readFileSync(file, "utf8").includes(`<string>${type}</string>`);
+    } else if (b === "firefox") {
+      const file = "/etc/firefox/policies/policies.json";
+      has = fs.existsSync(file) && !!(JSON.parse(fs.readFileSync(file, "utf8")).policies || {}).WebsiteFilter;
+    } else {
+      const dir = { brave: "/etc/brave/policies/managed", chrome: "/etc/opt/chrome/policies/managed", chromium: "/etc/chromium/policies/managed", edge: "/etc/opt/edge/policies/managed" }[b];
+      const file = path.join(dir, "focus-guard.json");
+      has = fs.existsSync(file) && JSON.parse(fs.readFileSync(file, "utf8")).URLBlocklist.includes("facebook.com");
+    }
+    check(`${b} policy ${want ? "applied" : "not applied"}`, has === want);
+  }
+}
+
 const gsi = (matchid, game_state, win_team) => ({
   map: { matchid, game_state, win_team, clock_time: 1800, radiant_score: 30, dire_score: 12 },
   player: { team_name: "radiant", kills: 10, deaths: 1, assists: 12, last_hits: 250, denies: 9, gpm: 650, xpm: 720 },
@@ -92,6 +138,12 @@ const gsi = (matchid, game_state, win_team) => ({
   check("launch option added for account without Dota settings", lc("222").includes('"LaunchOptions"\t\t"-gamestateintegration"'));
 
 
+  const config = JSON.parse(fs.readFileSync(path.join(DEST, "dota-limit", "config.json"), "utf8"));
+  check(`config matches the installer answers (${config.mode}, ${config.maxGames} games, reset ${config.resetHour})`,
+    config.mode === EXPECT.mode && config.resetHour === EXPECT.resetHour && (config.mode === "bo3" || config.maxGames === EXPECT.maxGames) && config.blockSafari === EXPECT.blockSafari);
+
+  checkBrowserPolicies();
+
   const dotaExe = IS_WIN
     ? path.join(os.tmpdir(), "fg-dota", "dota2.exe")
     : path.join(os.tmpdir(), "fg-dota", "dota 2 beta", "game", "bin", "linuxsteamrt64", "dota2");
@@ -99,22 +151,42 @@ const gsi = (matchid, game_state, win_team) => ({
   await waitFor("Dota without -gamestateintegration gets closed", () => dota.exitedAt, 30);
   check("closed by the service, with a notice", (await notices()).some((n) => n.msg.includes("-gamestateintegration")));
 
-  for (const id of ["9000000001", "9000000002"]) {
+  // Best of 3: a 2-0 ends the day. Fixed games: play them all, losing one, and check it
+  // doesn't lock one game early.
+  const results = EXPECT.mode === "bo3" ? ["radiant", "radiant"] : Array.from({ length: EXPECT.maxGames }, (_, i) => (i === 1 ? "dire" : "radiant"));
+  for (let i = 0; i < results.length; i++) {
+    const id = String(9000000001 + i);
     await request("http://127.0.0.1:43210/", gsi(id, "DOTA_GAMERULES_STATE_GAME_IN_PROGRESS"));
-    await request("http://127.0.0.1:43210/", gsi(id, "DOTA_GAMERULES_STATE_POST_GAME", "radiant"));
+    await request("http://127.0.0.1:43210/", gsi(id, "DOTA_GAMERULES_STATE_POST_GAME", results[i]));
+    await request("http://127.0.0.1:43210/", { provider: { name: "Dota 2" } });
+    if (i < results.length - 1) {
+      await sleep(6000);
+      check(`not locked after game ${i + 1} of ${results.length}`, !(await api()).today.lockedAt);
+    }
   }
-  await request("http://127.0.0.1:43210/", { provider: { name: "Dota 2" } });
 
   const today = (await api()).today;
-  check("two wins recorded", today.wins === 2 && today.losses === 0 && today.limitReached);
+  const wins = results.filter((r) => r === "radiant").length;
+  check(`${wins}-${results.length - wins} recorded`, today.wins === wins && today.losses === results.length - wins && today.limitReached);
   const d = today.matches["9000000001"].details;
   check("match details saved", d.hero === "npc_dota_hero_juggernaut" && d.kills === 10 && d.items[0] === "item_phase_boots");
-  await waitFor("Steam gets locked after 2-0", async () => (await api()).today.lockedAt, 20);
+  await waitFor("Steam gets locked once the day is decided", async () => (await api()).today.lockedAt, 20);
 
   const steam = await fakeProcess(path.join(os.tmpdir(), "fg-steam", IS_WIN ? "steam.exe" : process.platform === "darwin" ? "steam_osx" : "steam"));
   await waitFor("Steam gets closed while locked", () => steam.exitedAt, 30);
 
   check("closed by the service, with a notice", (await notices()).some((n) => n.msg.includes("locked until tomorrow")));
+
+  if (IS_MAC) {
+    const safari = await fakeProcess("/Applications/Safari.app/Contents/MacOS/Safari");
+    if (EXPECT.blockSafari) {
+      await waitFor("Safari gets closed when blocked", () => safari.exitedAt, 30);
+    } else {
+      await sleep(12000);
+      check("Safari left alone when not blocked", !safari.exitedAt);
+      safari.kill();
+    }
+  }
   console.log("\nall checks passed");
   process.exit(0);
 })().catch((e) => {

@@ -1,5 +1,5 @@
 {
-  "URLBlocklist": [
+  "block": [
     "facebook.com",
     "youtube.com",
     "youtu.be",
@@ -7,7 +7,7 @@
     "reddit.com",
     "redd.it"
   ],
-  "URLAllowlist": [
+  "allow": [
     "facebook.com/messages",
     "facebook.com/login",
     "facebook.com/checkpoint",

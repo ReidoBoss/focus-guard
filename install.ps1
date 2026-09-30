@@ -2,9 +2,9 @@
 #
 #   irm https://raw.githubusercontent.com/ReidoBoss/focus-guard/main/install.ps1 | iex
 #
-# Uninstall:
+# With options (-Yes: no questions, -Uninstall: remove):
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/ReidoBoss/focus-guard/main/install.ps1))) -Uninstall
-param([switch]$Uninstall)
+param([switch]$Uninstall, [switch]$Yes)
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -16,14 +16,89 @@ $Task = "FocusGuard"
 $NotifierTask = "FocusGuardNotifier"
 $StatsHost = "dota-limiter-stats"
 $Hosts = Join-Path $env:windir "System32\drivers\etc\hosts"
-$BravePolicy = "HKLM:\SOFTWARE\Policies\BraveSoftware\Brave"
+
+$AllBrowsers = @("brave", "chrome", "edge", "firefox")
+$BrowserNames = @{ brave = "Brave"; chrome = "Google Chrome"; edge = "Microsoft Edge"; firefox = "Firefox" }
+$PolicyKeys = @{
+    brave   = "HKLM:\SOFTWARE\Policies\BraveSoftware\Brave"
+    chrome  = "HKLM:\SOFTWARE\Policies\Google\Chrome"
+    edge    = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+    firefox = "HKLM:\SOFTWARE\Policies\Mozilla\Firefox\WebsiteFilter"
+}
+$BrowserExes = @{
+    brave   = @("$env:ProgramFiles\BraveSoftware\Brave-Browser\Application\brave.exe", "${env:ProgramFiles(x86)}\BraveSoftware\Brave-Browser\Application\brave.exe", "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\Application\brave.exe")
+    chrome  = @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe", "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe")
+    edge    = @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe")
+    firefox = @("$env:ProgramFiles\Mozilla Firefox\firefox.exe", "${env:ProgramFiles(x86)}\Mozilla Firefox\firefox.exe")
+}
 
 function Say($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Warn($msg) { Write-Host "[!] $msg" -ForegroundColor Yellow }
+function Bold($msg) { Write-Host $msg -ForegroundColor White }
 
+# ---------------------------------------------------------------- prompts
+# No questions with -Yes or in CI: every question takes its default.
+$Interactive = (-not $Yes) -and ($env:FG_INTERACTIVE -or ((-not $env:CI) -and [Environment]::UserInteractive))
+
+function Ask($question, $default) {
+    if (-not $Interactive) { return $default }
+    $prompt = $question
+    if ("$default" -ne "") { $prompt = "$question [$default]" }
+    if ([Console]::IsInputRedirected) {
+        Write-Host -NoNewline "${prompt}: "
+        $answer = [Console]::In.ReadLine()
+        Write-Host $answer
+    } else {
+        $answer = Read-Host $prompt
+    }
+    if ([string]::IsNullOrWhiteSpace($answer)) { return $default }
+    return $answer.Trim()
+}
+
+function YesNo($question, $default) {
+    while ($true) {
+        $a = Ask "$question (y/n)" $default
+        if ($a -match "^[Yy]") { return $true }
+        if ($a -match "^[Nn]") { return $false }
+        Write-Host "Please answer y or n."
+    }
+}
+
+function Choose($question, $default, [string[]]$options) {
+    if ($Interactive) {
+        Write-Host ""
+        Write-Host $question
+        for ($i = 0; $i -lt $options.Count; $i++) { Write-Host "  $($i + 1)) $($options[$i])" }
+    } else {
+        return [int]$default
+    }
+    while ($true) {
+        $a = Ask "Choose 1-$($options.Count)" $default
+        $n = 0
+        if ([int]::TryParse("$a", [ref]$n) -and $n -ge 1 -and $n -le $options.Count) { return $n }
+        Write-Host "Please type a number from 1 to $($options.Count)."
+    }
+}
+
+function Number($question, $default, $min, $max) {
+    if (-not $Interactive) { return [int]$default }
+    while ($true) {
+        $a = Ask $question $default
+        $n = 0
+        if ([int]::TryParse("$a", [ref]$n) -and $n -ge $min -and $n -le $max) { return $n }
+        Write-Host "Please type a whole number from $min to $max."
+    }
+}
+
+# ---------------------------------------------------------------- basics
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw "Run PowerShell as Administrator (right-click > Run as administrator), then paste the command again."
+}
+
+function Test-BrowserInstalled($b) {
+    foreach ($p in $BrowserExes[$b]) { if ($p -and (Test-Path $p)) { return $true } }
+    return $false
 }
 
 function Stop-FocusGuard {
@@ -40,16 +115,39 @@ function Remove-HostsEntry {
     Set-Content -Path $Hosts -Value $lines -Encoding ASCII
 }
 
+function Set-UrlList($key, $values) {
+    Remove-Item $key -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -Path $key -Force | Out-Null
+    $i = 1
+    foreach ($v in $values) {
+        New-ItemProperty -Path $key -Name "$i" -Value $v -PropertyType String -Force | Out-Null
+        $i++
+    }
+}
+
+function Remove-BrowserPolicy($b) {
+    if ($b -eq "firefox") {
+        Remove-Item $PolicyKeys[$b] -Recurse -Force -ErrorAction SilentlyContinue
+    } else {
+        Remove-Item "$($PolicyKeys[$b])\URLBlocklist", "$($PolicyKeys[$b])\URLAllowlist" -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# ---------------------------------------------------------------- uninstall
 if ($Uninstall) {
+    if ($Interactive -and -not (YesNo "Remove the Dota limit and the website blocker from this computer?" "n")) {
+        Write-Host "Nothing removed."
+        return
+    }
     Say "Removing Focus Guard"
     Stop-FocusGuard
     foreach ($t in @($Task, $NotifierTask)) {
         Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
     }
-    Remove-Item "$BravePolicy\URLBlocklist", "$BravePolicy\URLAllowlist" -Recurse -Force -ErrorAction SilentlyContinue
+    foreach ($b in $AllBrowsers) { Remove-BrowserPolicy $b }
     Remove-HostsEntry
     Remove-Item $Dest -Recurse -Force -ErrorAction SilentlyContinue
-    Say "Done. Remove the Focus Guard extension from brave://extensions yourself."
+    Say "Done. Remove the Focus Guard extension from your browsers' extension pages yourself."
     return
 }
 
@@ -58,7 +156,6 @@ $Src = $null
 if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "dota-limit\daemon.js"))) {
     $Src = $PSScriptRoot
 } else {
-    Say "Downloading Focus Guard"
     $tmp = Join-Path $env:TEMP ("focus-guard-" + [guid]::NewGuid())
     New-Item -ItemType Directory -Path $tmp | Out-Null
     $zip = Join-Path $tmp "src.zip"
@@ -78,7 +175,7 @@ function Find-Node {
 }
 $Node = Find-Node
 if (-not $Node) {
-    Say "Installing Node.js"
+    Say "Installing Node.js (needed to run Focus Guard)"
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         throw "Node.js is required. Install the LTS version from https://nodejs.org, then run this again."
     }
@@ -86,34 +183,144 @@ if (-not $Node) {
     $Node = Find-Node
     if (-not $Node) { throw "Node.js install failed. Install it from https://nodejs.org, then run this again." }
 }
-Write-Host "Using Node.js $(& $Node -v) at $Node"
+
+# ---------------------------------------------------------------- questions
+# Last install's answers become this run's defaults.
+$Prev = $null
+$choicesFile = Join-Path $Dest "choices.json"
+if (Test-Path $choicesFile) { $Prev = Get-Content $choicesFile -Raw | ConvertFrom-Json }
+function Prev($key, $default) {
+    if ($Prev -and ($Prev.PSObject.Properties.Name -contains $key)) { return $Prev.$key }
+    return $default
+}
+
+if ($Interactive) {
+    Write-Host ""
+    Bold "Focus Guard setup"
+    Write-Host "Press Enter to take the answer in [brackets]."
+    Write-Host ""
+    Bold "1. Dota 2 daily limit"
+    Write-Host "Counts your matches and closes Steam for the rest of the day once you're done."
+}
+$DotaEnabled = $false
+$Mode = Prev "mode" "bo3"
+$MaxGames = [int](Prev "maxGames" 3)
+$ResetHour = [int](Prev "resetHour" 4)
+$dotaDefault = "n"
+if (Prev "dotaEnabled" $true) { $dotaDefault = "y" }
+if (YesNo "Set up the Dota 2 limit?" $dotaDefault) {
+    $DotaEnabled = $true
+    $modeDefault = 1
+    if ($Mode -eq "games") { $modeDefault = 2 }
+    $pick = Choose "When should the day end?" $modeDefault @("Best of 3: stop at 2 wins or 2 losses", "After a fixed number of games")
+    if ($pick -eq 2) {
+        $Mode = "games"
+        $MaxGames = Number "How many games per day?" $MaxGames 1 20
+    } else {
+        $Mode = "bo3"
+    }
+    $ResetHour = Number "What hour does a new day start? (0-23, so a 2 AM game counts toward the night before)" $ResetHour 0 23
+}
+
+if ($Interactive) {
+    Write-Host ""
+    Bold "2. Website blocker"
+    Write-Host "Blocks Facebook, YouTube and Reddit, but keeps facebook.com/messages working."
+    $status = ($AllBrowsers | ForEach-Object {
+        if (Test-BrowserInstalled $_) { "$($BrowserNames[$_]) (installed)" } else { $BrowserNames[$_] }
+    }) -join ", "
+    Write-Host "Supported here: $status"
+}
+$prevBrowsers = Prev "browsers" $null
+$browserDefault = 1
+if ($null -ne $prevBrowsers -and $prevBrowsers -eq "") { $browserDefault = 3 } elseif ($prevBrowsers -and $prevBrowsers -ne ($AllBrowsers -join ",")) { $browserDefault = 2 }
+$pick = Choose "Block these sites in:" $browserDefault @(
+    "Every supported browser, including ones you install later (recommended)",
+    "Only the browsers I pick",
+    "None, skip the website blocker")
+$Browsers = @()
+if ($pick -eq 1) { $Browsers = $AllBrowsers }
+if ($pick -eq 2) {
+    foreach ($b in $AllBrowsers) {
+        $def = "n"
+        if ($prevBrowsers) {
+            if (($prevBrowsers -split ",") -contains $b) { $def = "y" }
+        } elseif (Test-BrowserInstalled $b) { $def = "y" }
+        if (YesNo "  $($BrowserNames[$b])?" $def) { $Browsers += $b }
+    }
+}
+$names = ($Browsers | ForEach-Object { $BrowserNames[$_] }) -join ", "
+if (-not $names) { $names = "off" }
+
+if ($Interactive) {
+    Write-Host ""
+    Bold "Summary"
+    if ($DotaEnabled) {
+        if ($Mode -eq "bo3") { Write-Host "  Dota 2 limit:     best of 3, new day at ${ResetHour}:00" } else { Write-Host "  Dota 2 limit:     $MaxGames games, new day at ${ResetHour}:00" }
+    } else {
+        Write-Host "  Dota 2 limit:     off"
+    }
+    Write-Host "  Website blocker:  $names"
+    Write-Host ""
+    if (-not (YesNo "Install with these settings?" "y")) {
+        Write-Host "Nothing changed."
+        return
+    }
+}
+
+$Choices = [ordered]@{
+    dotaEnabled = $DotaEnabled
+    mode        = $Mode
+    maxGames    = $MaxGames
+    resetHour   = $ResetHour
+    browsers    = ($Browsers -join ",")
+    blockSafari = $false
+}
+$ChoicesJson = $Choices | ConvertTo-Json -Compress
 
 # ---------------------------------------------------------------- files
 Say "Installing to $Dest"
 Stop-FocusGuard
 New-Item -ItemType Directory -Path $Dest -Force | Out-Null
-Remove-Item (Join-Path $Dest "dota-limit\stats-url.txt") -Force -ErrorAction SilentlyContinue
-Copy-Item (Join-Path $Src "dota-limit"), (Join-Path $Src "brave") -Destination $Dest -Recurse -Force
+foreach ($old in @("brave", "browsers\extension", "dota-limit\stats-url.txt")) {
+    Remove-Item (Join-Path $Dest $old) -Recurse -Force -ErrorAction SilentlyContinue
+}
+Copy-Item (Join-Path $Src "dota-limit"), (Join-Path $Src "browsers") -Destination $Dest -Recurse -Force
+Set-Content -Path $choicesFile -Value $ChoicesJson -Encoding ASCII
 # Only administrators can change the limiter's files and settings.
 icacls $Dest /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" | Out-Null
 
 # ---------------------------------------------------------------- dota 2
-Say "Setting up Dota 2 match tracking"
-# Steam rewrites its config on exit, so it has to be closed before launch options are changed.
-Stop-Process -Name steam, steamwebhelper, dota2 -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 1
-$Detected = & $Node (Join-Path $Dest "dota-limit\setup.js") detect
-if ($LASTEXITCODE -ne 0) { throw "Dota setup failed." }
-# Passed through the environment: PowerShell 5 mangles quotes in native arguments.
-$env:FG_DETECTED = $Detected
-& $Node (Join-Path $Dest "dota-limit\setup.js") write-config (Join-Path $Dest "dota-limit\config.json") $env:USERNAME | Out-Null
-$info = $Detected | ConvertFrom-Json
-if ($info.dotaDir) {
-    Write-Host "Found Dota 2 at: $($info.dotaDir)"
-    if ($info.launchOptionsPatched.Count -gt 0) { Write-Host "Added -gamestateintegration to Dota 2 launch options." }
-} else {
-    Warn "Dota 2 wasn't found. Install it through Steam, then run this installer again."
+$Detected = "{}"
+if ($DotaEnabled) {
+    Say "Setting up Dota 2 match tracking"
+    # Steam rewrites its settings when it quits, so it has to be closed before launch options change.
+    $patch = $true
+    if ((Get-Process -Name steam -ErrorAction SilentlyContinue) -and $Interactive) {
+        $patch = YesNo "Steam is open and has to close so its launch options can be changed. Close it now?" "y"
+    }
+    if ($patch) {
+        Stop-Process -Name steam, steamwebhelper, dota2 -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+        $env:FG_NO_LAUNCH_OPTIONS = ""
+    } else {
+        $env:FG_NO_LAUNCH_OPTIONS = "1"
+    }
+    $Detected = & $Node (Join-Path $Dest "dota-limit\setup.js") detect
+    if ($LASTEXITCODE -ne 0) { throw "Dota setup failed." }
+    $info = $Detected | ConvertFrom-Json
+    if ($info.dotaDir) {
+        Write-Host "Found Dota 2 at: $($info.dotaDir)"
+        if ($info.launchOptionsPatched.Count -gt 0) { Write-Host "Added -gamestateintegration to Dota 2 launch options." }
+        if (-not $patch) { Warn "Add -gamestateintegration to Dota 2 launch options in Steam yourself (Dota 2 > Properties)." }
+    } else {
+        Warn "Dota 2 wasn't found. Install it through Steam, then run this installer again."
+    }
 }
+# Passed through the environment: PowerShell 5 mangles quotes in native arguments.
+$env:FG_DETECTED = "$Detected"
+$env:FG_CHOICES = $ChoicesJson
+& $Node (Join-Path $Dest "dota-limit\setup.js") write-config (Join-Path $Dest "dota-limit\config.json") $env:USERNAME | Out-Null
 
 # ---------------------------------------------------------------- service
 Say "Starting the background service"
@@ -147,17 +354,19 @@ if (-not (Select-String -Path $Hosts -Pattern " $StatsHost$" -Quiet)) {
 }
 ipconfig /flushdns | Out-Null
 
-# ---------------------------------------------------------------- brave
-Say "Blocking Facebook, YouTube and Reddit in Brave"
-$policy = Get-Content (Join-Path $Dest "brave\policy.json") -Raw | ConvertFrom-Json
-foreach ($name in @("URLBlocklist", "URLAllowlist")) {
-    $key = "$BravePolicy\$name"
-    Remove-Item $key -Recurse -Force -ErrorAction SilentlyContinue
-    New-Item -Path $key -Force | Out-Null
-    $i = 1
-    foreach ($url in $policy.$name) {
-        New-ItemProperty -Path $key -Name "$i" -Value $url -PropertyType String -Force | Out-Null
-        $i++
+# ---------------------------------------------------------------- browsers
+Say "Website blocker: $names"
+$chromium = (& $Node (Join-Path $Dest "browsers\policies.js") chromium | Out-String) | ConvertFrom-Json
+$firefox = (& $Node (Join-Path $Dest "browsers\policies.js") firefox | Out-String) | ConvertFrom-Json
+foreach ($b in $AllBrowsers) {
+    Remove-BrowserPolicy $b
+    if ($Browsers -notcontains $b) { continue }
+    if ($b -eq "firefox") {
+        Set-UrlList "$($PolicyKeys[$b])\Block" $firefox.Block
+        Set-UrlList "$($PolicyKeys[$b])\Exceptions" $firefox.Exceptions
+    } else {
+        Set-UrlList "$($PolicyKeys[$b])\URLBlocklist" $chromium.URLBlocklist
+        Set-UrlList "$($PolicyKeys[$b])\URLAllowlist" $chromium.URLAllowlist
     }
 }
 
@@ -174,14 +383,25 @@ for ($i = 0; $i -lt 20 -and -not $ok; $i++) {
 }
 if ($ok) { Say "Focus Guard is running" } else { Warn "The service didn't answer yet. Check $Dest\dota-limit\log.txt" }
 
-Write-Host @"
+Write-Host ""
+if ($DotaEnabled) { Write-Host "  Stats page:  $StatsUrl" }
+if ($Browsers | Where-Object { $_ -ne "firefox" }) {
+    Write-Host @"
 
-  Stats page:  $StatsUrl
-  Daily limit: best of 3 (resets at 4 AM). Change it in $Dest\dota-limit\config.json
-
-  One last manual step: Brave doesn't let installers add extensions.
-    1. Open brave://extensions and turn on Developer mode
-    2. Click "Load unpacked" and choose: $Dest\brave\extension
-    3. Fully quit Brave and open it again
-
+  One manual step per browser: browsers don't let installers add extensions.
+  The extension stops Facebook's Home button from getting around the block.
+    1. Open the extensions page (brave://extensions, chrome://extensions or edge://extensions)
+    2. Turn on Developer mode
+    3. Click "Load unpacked" and choose: $Dest\browsers\extension
 "@
+}
+if ($Browsers -contains "firefox") {
+    Write-Host @"
+
+  Firefox: direct visits are blocked, but Firefox only runs extensions signed by Mozilla,
+  so clicking Home inside facebook.com/messages can still reach the feed there.
+"@
+}
+Write-Host ""
+Write-Host "  Restart your browsers so they pick up the block list. Run this installer again any time to change settings."
+Write-Host ""

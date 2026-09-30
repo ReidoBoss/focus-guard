@@ -4,8 +4,9 @@
 //     Finds Dota 2, writes its Game State Integration file and adds the
 //     -gamestateintegration launch option. Prints what it found as JSON.
 //
-//   node setup.js write-config <file> <user> [detected-json]   (run as root/admin)
-//     The detected JSON can also come from the FG_DETECTED environment variable.
+//   node setup.js write-config <file> <user>   (run as root/admin)
+//     Reads the detect output from FG_DETECTED and the installer's answers from
+//     FG_CHOICES (both JSON), and keeps any settings you changed by hand.
 //     Writes config.json, keeping any settings you changed on a reinstall.
 const fs = require("fs");
 const os = require("os");
@@ -24,7 +25,12 @@ const DEFAULTS = {
   postGameGraceSeconds: 90,
   port: 43210,
   requireReports: false,
+  dotaEnabled: true,
+  blockSafari: false,
 };
+
+// Installer answers that map straight onto config.json.
+const CHOICE_KEYS = ["dotaEnabled", "mode", "maxGames", "resetHour", "blockSafari"];
 
 function windowsSteamPath() {
   try {
@@ -123,16 +129,21 @@ function detect(port) {
     fs.writeFileSync(file, gsiConfig(port));
     result.gsiWritten = true;
   }
-  for (const root of roots) result.launchOptionsPatched.push(...patchLaunchOptions(root));
+  // Skipped when you chose to keep Steam open, since Steam would overwrite the change.
+  if (!process.env.FG_NO_LAUNCH_OPTIONS) {
+    for (const root of roots) result.launchOptionsPatched.push(...patchLaunchOptions(root));
+  }
   return result;
 }
 
-function writeConfig(file, user, detected) {
+function writeConfig(file, user, detected, choices) {
   let existing = {};
   try {
     existing = JSON.parse(fs.readFileSync(file, "utf8"));
   } catch (e) {}
-  const config = Object.assign({}, DEFAULTS, existing, { user });
+  const picked = {};
+  for (const k of CHOICE_KEYS) if (choices[k] !== undefined) picked[k] = choices[k];
+  const config = Object.assign({}, DEFAULTS, existing, picked, { user });
   if (detected.dotaDir) config.dotaDir = detected.dotaDir;
   fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
   return config;
@@ -142,8 +153,9 @@ const [cmd, ...args] = process.argv.slice(2);
 if (cmd === "detect") {
   console.log(JSON.stringify(detect(Number(args[0]) || DEFAULTS.port)));
 } else if (cmd === "write-config") {
-  console.log(JSON.stringify(writeConfig(args[0], args[1], JSON.parse(args[2] || process.env.FG_DETECTED || "{}"))));
+  const json = (v) => JSON.parse(v || "{}");
+  console.log(JSON.stringify(writeConfig(args[0], args[1], json(process.env.FG_DETECTED), json(process.env.FG_CHOICES))));
 } else {
-  console.error("usage: node setup.js detect [port] | write-config <file> <user> <json>");
+  console.error("usage: node setup.js detect [port] | write-config <file> <user>");
   process.exit(1);
 }

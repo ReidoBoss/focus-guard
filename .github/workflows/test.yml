@@ -76,3 +76,64 @@ jobs:
             [ -f "$f" ] && { echo "== $f"; cat "$f"; }
           done
           command -v journalctl >/dev/null && sudo journalctl -u focus-guard --no-pager | tail -50 || true
+
+  interactive:
+    name: interactive ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create a fake Steam + Dota 2 install
+        run: node test/fake-steam.js
+
+      - name: Answer the installer's questions (macOS / Linux)
+        if: runner.os != 'Windows'
+        run: |
+          command -v expect >/dev/null || sudo apt-get install -y -qq expect >/dev/null
+          expect test/interactive.exp install
+
+      - name: Answer the installer's questions (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $env:FG_INTERACTIVE = "1"
+          # Dota: yes, fixed games, 3 (default), bad hour then 5. Browsers: pick Brave, Edge, Firefox. Confirm.
+          "y`n2`n`nbanana`n5`n2`ny`nn`ny`ny`ny`n" | powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: End-to-end test with those answers
+        env:
+          FG_EXPECT_BROWSERS: brave,edge,firefox
+          FG_EXPECT_MODE: games
+          FG_EXPECT_MAX: "3"
+          FG_EXPECT_RESET: "5"
+          FG_EXPECT_SAFARI: ${{ runner.os == 'macOS' && '1' || '0' }}
+        run: node test/e2e.js
+
+      - name: Uninstall, confirming the question (macOS / Linux)
+        if: runner.os != 'Windows'
+        run: |
+          expect test/interactive.exp uninstall
+          if [ -d /opt/focus-guard ] || [ -d /usr/local/focus-guard ]; then echo "still installed"; exit 1; fi
+
+      - name: Uninstall, confirming the question (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $env:FG_INTERACTIVE = "1"
+          "y`n" | powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 -Uninstall
+          if (Test-Path "$env:ProgramFiles\FocusGuard") { throw "still installed" }
+          if (Test-Path "HKLM:\SOFTWARE\Policies\Google\Chrome\URLBlocklist") { throw "policy left behind" }
+
+      - name: Service logs
+        if: failure()
+        shell: bash
+        run: |
+          for f in /usr/local/focus-guard/dota-limit/log.txt /usr/local/focus-guard/dota-limit/error.txt /opt/focus-guard/dota-limit/log.txt "/c/Program Files/FocusGuard/dota-limit/log.txt"; do
+            [ -f "$f" ] && { echo "== $f"; cat "$f"; }
+          done
+          true

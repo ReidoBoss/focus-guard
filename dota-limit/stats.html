@@ -177,7 +177,8 @@ function render({ today, history }) {
 
   const st = document.getElementById("status");
   const reset = `${today.resetHour % 12 || 12}:00 ${today.resetHour < 12 ? "AM" : "PM"}`;
-  if (today.lockedAt) { st.className = "pill locked"; st.textContent = `Locked until ${reset}`; }
+  if (today.dotaEnabled === false) { st.className = "pill"; st.textContent = "Dota limit off"; }
+  else if (today.lockedAt) { st.className = "pill locked"; st.textContent = `Locked until ${reset}`; }
   else if (today.live) { st.className = "pill live"; st.textContent = "Match in progress"; }
   else { st.className = "pill open"; st.textContent = "Steam open"; }
 
@@ -188,12 +189,13 @@ function render({ today, history }) {
   else if (bo3 && losses >= 2) verdict = "Series lost. Done for today. Come back sharper tomorrow.";
   else if (today.limitReached) verdict = "Done for today.";
   else if (bo3 && wins === 1 && losses === 1) verdict = "1-1. Next game decides it.";
-  else verdict = bo3 ? "Best of 3. First to 2 wins." : `${Math.max(0, 3 - list.length)} games left today.`;
+  else verdict = bo3 ? "Best of 3. First to 2 wins." : `${Math.max(0, (today.maxGames || 3) - list.length)} games left today.`;
   document.getElementById("verdict").textContent = verdict;
 
   const ordered = list.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   const done = today.limitReached && !today.live;
-  document.getElementById("pips").innerHTML = [0, 1, 2].map((i) => {
+  const slots = bo3 ? 3 : Math.max(today.maxGames || 3, list.length);
+  document.getElementById("pips").innerHTML = [...Array(slots).keys()].map((i) => {
     const m = ordered[i];
     if (m) return m.result ? `<div class="pip ${m.result}">${m.result === "win" ? "W" : "L"}</div>` : `<div class="pip live">•</div>`;
     return `<div class="pip ${done ? "skip" : ""}">${i + 1}</div>`;

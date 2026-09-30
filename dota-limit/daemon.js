@@ -23,6 +23,8 @@ const GSI_CFG = gsiConfig(CONFIG.port);
 
 const IS_WIN = process.platform === "win32";
 const IS_MAC = process.platform === "darwin";
+const DOTA_ENABLED = CONFIG.dotaEnabled !== false;
+const BLOCK_SAFARI = IS_MAC && CONFIG.blockSafari === true;
 
 const LIVE_STATES = new Set([
   "DOTA_GAMERULES_STATE_STRATEGY_TIME",
@@ -148,6 +150,7 @@ let postGameSince = null;
 let lastPost = 0;
 
 function onGameState(body) {
+  if (!DOTA_ENABLED) return;
   if (Date.now() - lastPost > 60 * 1000) log(`Dota reporting (state: ${(body.map && body.map.game_state) || "menu"})`);
   lastPost = Date.now();
   const map = body.map || {};
@@ -221,6 +224,11 @@ function isDota(cmd) {
   return IS_WIN ? /^dota2\.exe$/i.test(cmd) : /dota 2 beta\/game\/bin\//i.test(cmd);
 }
 
+// Only the main Safari app, not the system services that share its name.
+function isSafari(cmd) {
+  return /Safari\.app\/Contents\/MacOS\/Safari( |$)/.test(cmd);
+}
+
 // Steam's small background helpers (ipcserver on macOS, steamservice on Windows) are
 // left alone: the OS respawns them and they can't launch games.
 function isSteam(cmd) {
@@ -274,12 +282,27 @@ function ensureGsiConfig() {
 
 let dotaSeenAt = null;
 let lastLockNotice = 0;
+let lastSafariNotice = 0;
 
 function tick() {
   rollover();
+  const procs = processes();
+
+  // Safari can't be filtered site by site, so the installer offers to block it outright.
+  if (BLOCK_SAFARI) {
+    const safari = procs.filter((p) => isSafari(p.cmd));
+    if (safari.length) {
+      kill(safari);
+      if (Date.now() - lastSafariNotice > 10 * 60 * 1000) {
+        notify("Focus Guard", "Safari is blocked. Use one of your other browsers.");
+        lastSafariNotice = Date.now();
+      }
+    }
+  }
+
+  if (!DOTA_ENABLED) return;
   ensureGsiConfig();
 
-  const procs = processes();
   const dota = procs.filter((p) => isDota(p.cmd));
   const steam = procs.filter((p) => isSteam(p.cmd));
 
@@ -329,7 +352,16 @@ function tick() {
 }
 
 function status() {
-  return { ...state, ...tally(), limitReached: limitReached(), mode: CONFIG.mode, resetHour: CONFIG.resetHour, currentMatch };
+  return {
+    ...state,
+    ...tally(),
+    limitReached: limitReached(),
+    mode: CONFIG.mode,
+    maxGames: CONFIG.maxGames,
+    resetHour: CONFIG.resetHour,
+    dotaEnabled: DOTA_ENABLED,
+    currentMatch,
+  };
 }
 
 // Stats site, reached through the hosts entry "dota-limiter-stats".
@@ -394,6 +426,6 @@ http
   })
   .listen(CONFIG.port, "127.0.0.1", () => log(`listening on ${CONFIG.port}`));
 
-ensureGsiConfig();
+if (DOTA_ENABLED) ensureGsiConfig();
 setInterval(tick, 5000);
 tick();

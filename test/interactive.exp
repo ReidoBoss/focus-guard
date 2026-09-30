@@ -1,0 +1,28 @@
+# CI only: answers the installer's questions like a person would.
+#   expect test/interactive.exp install     fixed 3 games, new day at 5, Brave + Edge + Firefox, block Safari
+#   expect test/interactive.exp uninstall   confirms the uninstall
+set timeout 120
+set action [lindex $argv 0]
+if {$action eq "uninstall"} {
+  spawn sudo CI=1 FG_INTERACTIVE=1 bash ./install.sh --uninstall
+  expect "Remove the Dota limit" { send "y\r" }
+  expect eof
+  exit [lindex [wait] 3]
+}
+spawn sudo CI=1 FG_INTERACTIVE=1 bash ./install.sh
+expect {
+  "Set up the Dota 2 limit?"      { send "y\r"; exp_continue }
+  "When should the day end?"      { expect "Choose 1-2"; send "2\r"; exp_continue }
+  "How many games per day?"       { send "\r"; exp_continue }
+  "What hour does a new day start?" { send "banana\r"; expect "whole number"; expect "What hour"; send "5\r"; exp_continue }
+  "Block these sites in:"         { expect "Choose 1-3"; send "2\r"; exp_continue }
+  "Brave?"                        { send "y\r"; exp_continue }
+  "Google Chrome?"                { send "n\r"; exp_continue }
+  "Chromium?"                     { send "n\r"; exp_continue }
+  "Microsoft Edge?"               { send "y\r"; exp_continue }
+  "Firefox?"                      { send "y\r"; exp_continue }
+  "What should happen to Safari?" { expect "Choose 1-2"; send "2\r"; exp_continue }
+  "Install with these settings?"  { send "y\r"; exp_continue }
+  eof
+}
+exit [lindex [wait] 3]
