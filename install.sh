@@ -94,6 +94,7 @@ echo "Using Node.js $("$NODE" -v) at $NODE"
 say "Installing to $DEST"
 stop_service
 mkdir -p "$DEST"
+rm -f "$DEST/dota-limit/stats-url.txt"
 cp -R "$SRC/dota-limit" "$SRC/brave" "$DEST/"
 if [ -d /usr/local/dotalimit ]; then
   for f in state.json history.json; do
@@ -184,11 +185,13 @@ else
 fi
 
 # ---------------------------------------------------------------- check
+STATS_URL="http://$STATS_HOST/"
 for _ in $(seq 1 15); do
-  curl -fs "http://$STATS_HOST/api" >/dev/null 2>&1 && break
+  if [ -f "$DEST/dota-limit/stats-url.txt" ] && curl -fs "$(cat "$DEST/dota-limit/stats-url.txt")api" >/dev/null 2>&1; then break; fi
   sleep 1
 done
-if curl -fs "http://$STATS_HOST/api" >/dev/null 2>&1; then
+if [ -f "$DEST/dota-limit/stats-url.txt" ] && curl -fs "$(cat "$DEST/dota-limit/stats-url.txt")api" >/dev/null 2>&1; then
+  STATS_URL="$(cat "$DEST/dota-limit/stats-url.txt")"
   say "Focus Guard is running"
 else
   warn "The service didn't answer yet. Check $DEST/dota-limit/log.txt"
@@ -196,7 +199,7 @@ fi
 
 cat <<EOF
 
-  Stats page:  http://$STATS_HOST
+  Stats page:  $STATS_URL
   Daily limit: best of 3 (resets at 4 AM). Change it in $DEST/dota-limit/config.json
 
   One last manual step: Brave doesn't let installers add extensions.

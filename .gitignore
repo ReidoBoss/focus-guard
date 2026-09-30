@@ -6,6 +6,7 @@ dota-limit/state.json
 dota-limit/history.json
 dota-limit/log.txt
 dota-limit/error.txt
+dota-limit/stats-url.txt
 dota-limit/notifier.vbs
 brave/focus-guard.mobileconfig
 *.focus-guard.bak

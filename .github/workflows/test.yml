@@ -35,14 +35,15 @@ jobs:
         if: runner.os != 'Windows' && github.ref == 'refs/heads/main'
         run: |
           curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/install.sh" | sudo CI=1 bash
-          curl -fs http://dota-limiter-stats/api | grep -q '"lockedAt":"'
+          curl -fs "$(curl -s -o /dev/null -w '%{redirect_url}' http://127.0.0.1:43210/)api" | grep -q '"lockedAt":"'
 
       - name: README one-liner (Windows)
         if: runner.os == 'Windows' && github.ref == 'refs/heads/main'
         shell: powershell
         run: |
           irm "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/install.ps1" | iex
-          if (-not ((Invoke-WebRequest http://dota-limiter-stats/api -UseBasicParsing).Content -match '"lockedAt":"')) { throw "state lost on reinstall" }
+          $url = (Get-Content "$env:ProgramFiles\FocusGuard\dota-limit\stats-url.txt" -Raw).Trim()
+          if (-not ((Invoke-WebRequest "$($url)api" -UseBasicParsing).Content -match '"lockedAt":"')) { throw "state lost on reinstall" }
 
       - name: Uninstall (macOS / Linux)
         if: runner.os != 'Windows'
@@ -58,6 +59,14 @@ jobs:
           & ./install.ps1 -Uninstall
           if (Test-Path "$env:ProgramFiles\FocusGuard") { throw "install folder still there" }
           if (Select-String -Path "$env:windir\System32\drivers\etc\hosts" -Pattern "dota-limiter-stats" -Quiet) { throw "hosts entry still there" }
+
+      - name: What owns port 80 (Windows)
+        if: always() && runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Get-NetTCPConnection -LocalPort 80 -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          netsh int ipv4 show excludedportrange protocol=tcp
+          netsh http show servicestate view=requestq | Select-String -Pattern "URL|Process" | Select-Object -First 20
 
       - name: Service logs
         if: failure()

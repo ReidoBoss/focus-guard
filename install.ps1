@@ -92,6 +92,7 @@ Write-Host "Using Node.js $(& $Node -v) at $Node"
 Say "Installing to $Dest"
 Stop-FocusGuard
 New-Item -ItemType Directory -Path $Dest -Force | Out-Null
+Remove-Item (Join-Path $Dest "dota-limit\stats-url.txt") -Force -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $Src "dota-limit"), (Join-Path $Src "brave") -Destination $Dest -Recurse -Force
 # Only administrators can change the limiter's files and settings.
 icacls $Dest /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" | Out-Null
@@ -162,9 +163,12 @@ foreach ($name in @("URLBlocklist", "URLAllowlist")) {
 
 # ---------------------------------------------------------------- check
 $ok = $false
+$StatsUrl = "http://$StatsHost/"
+$urlFile = Join-Path $Dest "dota-limit\stats-url.txt"
 for ($i = 0; $i -lt 20 -and -not $ok; $i++) {
     try {
-        Invoke-WebRequest "http://$StatsHost/api" -UseBasicParsing -TimeoutSec 2 | Out-Null
+        $StatsUrl = (Get-Content $urlFile -Raw).Trim()
+        Invoke-WebRequest "$($StatsUrl)api" -UseBasicParsing -TimeoutSec 2 | Out-Null
         $ok = $true
     } catch { Start-Sleep -Seconds 1 }
 }
@@ -172,7 +176,7 @@ if ($ok) { Say "Focus Guard is running" } else { Warn "The service didn't answer
 
 Write-Host @"
 
-  Stats page:  http://$StatsHost
+  Stats page:  $StatsUrl
   Daily limit: best of 3 (resets at 4 AM). Change it in $Dest\dota-limit\config.json
 
   One last manual step: Brave doesn't let installers add extensions.

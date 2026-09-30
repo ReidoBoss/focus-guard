@@ -14,6 +14,10 @@ const HISTORY_FILE = path.join(DIR, "history.json");
 const LOG_FILE = path.join(DIR, "log.txt");
 const STATS_PAGE = path.join(DIR, "stats.html");
 const STATS_HOST = "dota-limiter-stats";
+// Port 80 gives the page a clean address. If something else owns it (IIS, for
+// example), the page falls back to this port and the address includes it.
+const STATS_FALLBACK_PORT = CONFIG.statsFallbackPort || 8787;
+let statsUrl = `http://${STATS_HOST}/`;
 const GSI_FILE = CONFIG.dotaDir ? gsiPath(CONFIG.dotaDir) : null;
 const GSI_CFG = gsiConfig(CONFIG.port);
 
@@ -328,9 +332,8 @@ function status() {
   return { ...state, ...tally(), limitReached: limitReached(), mode: CONFIG.mode, resetHour: CONFIG.resetHour, currentMatch };
 }
 
-// Stats site on port 80, reached through the hosts entry "dota-limiter-stats".
-http
-  .createServer((req, res) => {
+// Stats site, reached through the hosts entry "dota-limiter-stats".
+const statsServer = http.createServer((req, res) => {
     const url = req.url.split("?")[0];
     res.setHeader("cache-control", "no-store");
     if (url === "/api") {
@@ -338,14 +341,29 @@ http
       return res.end(JSON.stringify({ today: status(), history: loadHistory() }));
     }
     if (req.headers.host && !req.headers.host.startsWith(STATS_HOST)) {
-      res.writeHead(302, { location: `http://${STATS_HOST}/` });
+      res.writeHead(302, { location: statsUrl });
       return res.end();
     }
     res.setHeader("content-type", "text/html; charset=utf-8");
     fs.createReadStream(STATS_PAGE).pipe(res);
-  })
-  .on("error", (e) => log(`stats page unavailable: ${e.message}`))
-  .listen(80, "127.0.0.1", () => log("stats page on http://" + STATS_HOST));
+  });
+
+function listenStats(port) {
+  statsServer
+    .once("error", (e) => {
+      if (port === 80) {
+        log(`port 80 unavailable (${e.code}), using ${STATS_FALLBACK_PORT}`);
+        return listenStats(STATS_FALLBACK_PORT);
+      }
+      log(`stats page unavailable: ${e.message}`);
+    })
+    .listen(port, "127.0.0.1", () => {
+      statsUrl = port === 80 ? `http://${STATS_HOST}/` : `http://${STATS_HOST}:${port}/`;
+      fs.writeFileSync(path.join(DIR, "stats-url.txt"), statsUrl);
+      log(`stats page on ${statsUrl}`);
+    });
+}
+listenStats(80);
 
 // Game State Integration endpoint. Dota POSTs here; GET /notices feeds notifier.js.
 http
@@ -366,7 +384,7 @@ http
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify(notices.filter((n) => n.id > after)));
     } else {
-      res.writeHead(302, { location: `http://${STATS_HOST}/` });
+      res.writeHead(302, { location: statsUrl });
       res.end();
     }
   })
