@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Focus Guard",
+  "version": "1.0.0",
+  "description": "Blocks YouTube and Reddit, and keeps Facebook locked to /messages (including in-app navigation).",
+  "permissions": ["webNavigation", "tabs"],
+  "host_permissions": ["*://*.facebook.com/*", "*://*.youtube.com/*", "*://youtu.be/*", "*://*.reddit.com/*", "*://redd.it/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["*://*.facebook.com/*"],
+      "js": ["facebook.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

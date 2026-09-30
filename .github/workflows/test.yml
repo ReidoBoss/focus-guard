@@ -1,0 +1,69 @@
+name: test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  install:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create a fake Steam + Dota 2 install
+        run: node test/fake-steam.js
+
+      - name: Install from this checkout (macOS / Linux)
+        if: runner.os != 'Windows'
+        run: sudo CI=1 bash ./install.sh
+
+      - name: Install from this checkout (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./install.ps1
+
+      - name: End-to-end test
+        run: node test/e2e.js
+
+      - name: README one-liner (macOS / Linux)
+        if: runner.os != 'Windows' && github.ref == 'refs/heads/main'
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/install.sh" | sudo CI=1 bash
+          curl -fs http://dota-limiter-stats/api | grep -q '"lockedAt":"'
+
+      - name: README one-liner (Windows)
+        if: runner.os == 'Windows' && github.ref == 'refs/heads/main'
+        shell: powershell
+        run: |
+          irm "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/install.ps1" | iex
+          if (-not ((Invoke-WebRequest http://dota-limiter-stats/api -UseBasicParsing).Content -match '"lockedAt":"')) { throw "state lost on reinstall" }
+
+      - name: Uninstall (macOS / Linux)
+        if: runner.os != 'Windows'
+        run: |
+          sudo bash ./install.sh --uninstall
+          if curl -fs --max-time 3 http://127.0.0.1:43210/; then echo "service still running"; exit 1; fi
+          if grep -q dota-limiter-stats /etc/hosts; then echo "hosts entry still there"; exit 1; fi
+
+      - name: Uninstall (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          & ./install.ps1 -Uninstall
+          if (Test-Path "$env:ProgramFiles\FocusGuard") { throw "install folder still there" }
+          if (Select-String -Path "$env:windir\System32\drivers\etc\hosts" -Pattern "dota-limiter-stats" -Quiet) { throw "hosts entry still there" }
+
+      - name: Service logs
+        if: failure()
+        shell: bash
+        run: |
+          for f in /usr/local/focus-guard/dota-limit/log.txt /usr/local/focus-guard/dota-limit/error.txt /opt/focus-guard/dota-limit/log.txt "/c/Program Files/FocusGuard/dota-limit/log.txt"; do
+            [ -f "$f" ] && { echo "== $f"; cat "$f"; }
+          done
+          command -v journalctl >/dev/null && sudo journalctl -u focus-guard --no-pager | tail -50 || true

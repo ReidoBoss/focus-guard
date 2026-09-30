@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dota Limiter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f13;
+    --panel: #151920;
+    --panel-2: #1b2029;
+    --line: #262c37;
+    --text: #e8eaee;
+    --muted: #8a93a3;
+    --win: #4ade80;
+    --win-bg: rgba(74, 222, 128, 0.12);
+    --loss: #f87171;
+    --loss-bg: rgba(248, 113, 113, 0.12);
+    --accent: #f5b642;
+    --live: #60a5fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 Inter, system-ui, sans-serif;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 16px 64px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  h1 span { color: var(--muted); font-weight: 500; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 40px 0 12px; font-weight: 600; }
+  .pill { padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; border: 1px solid var(--line); background: var(--panel); }
+  .pill.locked { color: var(--loss); border-color: rgba(248,113,113,.35); background: var(--loss-bg); }
+  .pill.open { color: var(--win); border-color: rgba(74,222,128,.35); background: var(--win-bg); }
+  .pill.live { color: var(--live); border-color: rgba(96,165,250,.35); background: rgba(96,165,250,.12); }
+
+  .series { margin-top: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 28px; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
+  .score { font: 700 56px/1 "JetBrains Mono", monospace; letter-spacing: -0.02em; }
+  .score .w { color: var(--win); } .score .l { color: var(--loss); } .score .d { color: var(--muted); margin: 0 10px; }
+  .verdict { color: var(--muted); margin-top: 8px; }
+  .pips { display: flex; gap: 10px; }
+  .pip { width: 44px; height: 44px; border-radius: 10px; border: 1.5px dashed var(--line); display: grid; place-items: center; font-weight: 800; font-size: 14px; color: var(--muted); }
+  .pip.win { border: 0; background: var(--win-bg); color: var(--win); }
+  .pip.loss { border: 0; background: var(--loss-bg); color: var(--loss); }
+  .pip.live { border: 1.5px solid var(--live); color: var(--live); animation: pulse 1.6s infinite; }
+  .pip.skip { opacity: .35; }
+  @keyframes pulse { 50% { opacity: .45; } }
+
+  .match { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
+  .match-top { display: grid; grid-template-columns: 112px 1fr auto; gap: 16px; align-items: center; padding: 16px; }
+  .portrait { width: 112px; height: 63px; border-radius: 8px; background: var(--panel-2) center/cover; }
+  .hero { font-weight: 700; font-size: 17px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .badge { font-weight: 800; font-size: 13px; padding: 4px 10px; border-radius: 6px; }
+  .badge.win { background: var(--win-bg); color: var(--win); }
+  .badge.loss { background: var(--loss-bg); color: var(--loss); }
+  .badge.live { background: rgba(96,165,250,.12); color: var(--live); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); border-top: 1px solid var(--line); }
+  .stat { padding: 12px 16px; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: 0; }
+  .stat b { display: block; font: 700 16px "JetBrains Mono", monospace; }
+  .stat small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .items { display: flex; gap: 6px; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; align-items: center; }
+  .item { width: 44px; height: 32px; border-radius: 4px; background: var(--panel-2) center/cover; }
+  .item.neutral { width: 32px; border-radius: 50%; margin-left: 8px; }
+  .links { margin-left: auto; display: flex; gap: 12px; font-size: 13px; }
+  .links a { color: var(--accent); text-decoration: none; }
+  .links a:hover { text-decoration: underline; }
+  .empty { color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: 14px; padding: 24px; text-align: center; }
+
+  .day { display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
+  .day .date { flex: 1; font-weight: 600; }
+  .day .rec { font: 700 14px "JetBrains Mono", monospace; }
+  .mini { display: flex; gap: 4px; }
+  .mini i { width: 10px; height: 10px; border-radius: 3px; background: var(--line); }
+  .mini i.win { background: var(--win); } .mini i.loss { background: var(--loss); }
+  .day-detail { margin: -2px 0 12px 16px; }
+
+  @media (max-width: 600px) {
+    .series { grid-template-columns: 1fr; }
+    .score { font-size: 44px; }
+    .match-top { grid-template-columns: 80px 1fr; }
+    .portrait { width: 80px; height: 45px; }
+    .match-top .badge { grid-column: 2; justify-self: start; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Dota Limiter <span id="daylabel"></span></h1>
+    <div id="status" class="pill">Loading</div>
+  </header>
+
+  <section class="series">
+    <div>
+      <div class="score" id="score"></div>
+      <div class="verdict" id="verdict"></div>
+    </div>
+    <div class="pips" id="pips"></div>
+  </section>
+
+  <h2>Today's matches</h2>
+  <div id="matches"></div>
+
+  <h2>History</h2>
+  <div id="history"></div>
+</div>
+
+<script>
+const CDN = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react";
+const heroImg = (n) => n && `${CDN}/heroes/${n.replace("npc_dota_hero_", "")}.png`;
+const itemImg = (n) => n && `${CDN}/items/${n.replace("item_", "")}.png`;
+const pretty = (n) => (n ? n.replace("npc_dota_hero_", "").split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ") : "Unknown hero");
+const clock = (s) => (s == null ? "-" : `${Math.floor(Math.max(s, 0) / 60)}:${String(Math.max(s, 0) % 60).padStart(2, "0")}`);
+const num = (v) => (v == null ? "-" : Number(v).toLocaleString());
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+function tally(matches) {
+  const list = Object.values(matches);
+  return { list, wins: list.filter((m) => m.result === "win").length, losses: list.filter((m) => m.result === "loss").length };
+}
+
+function matchCard(id, m) {
+  const d = m.details || {};
+  const res = m.result || "live";
+  const label = { win: "WIN", loss: "LOSS", live: "LIVE" }[res];
+  const numeric = /^\d+$/.test(id);
+  const when = new Date(m.startedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const score = d.radiant_score != null ? ` · ${d.radiant_score} - ${d.dire_score}` : "";
+  const sub = m.details
+    ? `${d.team ? d.team[0].toUpperCase() + d.team.slice(1) : ""}${d.level ? ` · Lvl ${d.level}` : ""} · ${clock(d.clock_time)}${score} · ${when}`
+    : `${m.note || "No details recorded"} · ${when}`;
+  const stats = m.details
+    ? `<div class="stats">
+        <div class="stat"><b>${num(d.kills)}/${num(d.deaths)}/${num(d.assists)}</b><small>K / D / A</small></div>
+        <div class="stat"><b>${num(d.last_hits)}/${num(d.denies)}</b><small>LH / DN</small></div>
+        <div class="stat"><b>${num(d.gpm)}</b><small>GPM</small></div>
+        <div class="stat"><b>${num(d.xpm)}</b><small>XPM</small></div>
+        <div class="stat"><b>${num(d.net_worth ?? d.gold)}</b><small>${d.net_worth != null ? "Net worth" : "Gold"}</small></div>
+      </div>`
+    : "";
+  const items = (d.items || []).map((n) => `<div class="item" title="${esc(n || "empty")}" style="${n ? `background-image:url(${itemImg(n)})` : ""}"></div>`).join("");
+  const neutral = d.neutral ? `<div class="item neutral" title="${esc(d.neutral)}" style="background-image:url(${itemImg(d.neutral)})"></div>` : "";
+  const links = numeric
+    ? `<div class="links">
+        <a href="https://www.opendota.com/matches/${id}" target="_blank" rel="noopener">OpenDota</a>
+        <a href="https://www.dotabuff.com/matches/${id}" target="_blank" rel="noopener">Dotabuff</a>
+        <a href="https://stratz.com/matches/${id}" target="_blank" rel="noopener">STRATZ</a>
+      </div>`
+    : "";
+  return `<div class="match">
+    <div class="match-top">
+      <div class="portrait" style="${d.hero ? `background-image:url(${heroImg(d.hero)})` : ""}"></div>
+      <div><div class="hero">${esc(pretty(d.hero))}</div><div class="sub">${esc(sub)}</div></div>
+      <span class="badge ${res}">${label}</span>
+    </div>
+    ${stats}
+    ${items || links ? `<div class="items">${items}${neutral}${links}</div>` : ""}
+  </div>`;
+}
+
+function renderMatches(matches) {
+  const entries = Object.entries(matches).sort((a, b) => a[1].startedAt.localeCompare(b[1].startedAt));
+  return entries.length ? entries.map(([id, m]) => matchCard(id, m)).join("") : `<div class="empty">No games yet today.</div>`;
+}
+
+let openDay = null;
+
+function render({ today, history }) {
+  const { list, wins, losses } = tally(today.matches);
+  document.getElementById("daylabel").textContent = "· " + new Date(today.day + "T12:00").toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+
+  const st = document.getElementById("status");
+  const reset = `${today.resetHour % 12 || 12}:00 ${today.resetHour < 12 ? "AM" : "PM"}`;
+  if (today.lockedAt) { st.className = "pill locked"; st.textContent = `Locked until ${reset}`; }
+  else if (today.live) { st.className = "pill live"; st.textContent = "Match in progress"; }
+  else { st.className = "pill open"; st.textContent = "Steam open"; }
+
+  document.getElementById("score").innerHTML = `<span class="w">${wins}</span><span class="d">-</span><span class="l">${losses}</span>`;
+  const bo3 = today.mode === "bo3";
+  let verdict;
+  if (bo3 && wins >= 2) verdict = "Series won. Done for today.";
+  else if (bo3 && losses >= 2) verdict = "Series lost. Done for today. Come back sharper tomorrow.";
+  else if (today.limitReached) verdict = "Done for today.";
+  else if (bo3 && wins === 1 && losses === 1) verdict = "1-1. Next game decides it.";
+  else verdict = bo3 ? "Best of 3. First to 2 wins." : `${Math.max(0, 3 - list.length)} games left today.`;
+  document.getElementById("verdict").textContent = verdict;
+
+  const ordered = list.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  const done = today.limitReached && !today.live;
+  document.getElementById("pips").innerHTML = [0, 1, 2].map((i) => {
+    const m = ordered[i];
+    if (m) return m.result ? `<div class="pip ${m.result}">${m.result === "win" ? "W" : "L"}</div>` : `<div class="pip live">•</div>`;
+    return `<div class="pip ${done ? "skip" : ""}">${i + 1}</div>`;
+  }).join("");
+
+  document.getElementById("matches").innerHTML = renderMatches(today.matches);
+
+  document.getElementById("history").innerHTML = history.length
+    ? history.map((d) => {
+        const t = tally(d.matches);
+        const minis = Object.values(d.matches).sort((a, b) => a.startedAt.localeCompare(b.startedAt)).map((m) => `<i class="${m.result || ""}"></i>`).join("");
+        const date = new Date(d.day + "T12:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+        return `<div class="day" data-day="${d.day}"><span class="date">${date}</span><span class="mini">${minis}</span><span class="rec">${t.wins}-${t.losses}</span></div>
+          ${openDay === d.day ? `<div class="day-detail">${renderMatches(d.matches)}</div>` : ""}`;
+      }).join("")
+    : `<div class="empty">Past days show up here after the 4 AM reset.</div>`;
+}
+
+let last;
+async function refresh() {
+  try {
+    const data = await (await fetch("/api", { cache: "no-store" })).json();
+    last = data;
+    render(data);
+  } catch {}
+}
+
+document.getElementById("history").addEventListener("click", (e) => {
+  const row = e.target.closest(".day");
+  if (!row) return;
+  openDay = openDay === row.dataset.day ? null : row.dataset.day;
+  if (last) render(last);
+});
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

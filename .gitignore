@@ -1,0 +1,11 @@
+.DS_Store
+node_modules/
+test/.fake.json
+dota-limit/config.json
+dota-limit/state.json
+dota-limit/history.json
+dota-limit/log.txt
+dota-limit/error.txt
+dota-limit/notifier.vbs
+brave/focus-guard.mobileconfig
+*.focus-guard.bak

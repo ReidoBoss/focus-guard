@@ -1,0 +1,16 @@
+{
+  "URLBlocklist": [
+    "facebook.com",
+    "youtube.com",
+    "youtu.be",
+    "youtube-nocookie.com",
+    "reddit.com",
+    "redd.it"
+  ],
+  "URLAllowlist": [
+    "facebook.com/messages",
+    "facebook.com/login",
+    "facebook.com/checkpoint",
+    "facebook.com/two_step_verification"
+  ]
+}
