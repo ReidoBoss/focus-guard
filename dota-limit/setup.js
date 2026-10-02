@@ -27,10 +27,11 @@ const DEFAULTS = {
   requireReports: false,
   dotaEnabled: true,
   blockSafari: false,
+  opendota: true,
 };
 
 // Installer answers that map straight onto config.json.
-const CHOICE_KEYS = ["dotaEnabled", "mode", "maxGames", "resetHour", "blockSafari"];
+const CHOICE_KEYS = ["dotaEnabled", "mode", "maxGames", "resetHour", "blockSafari", "opendota"];
 
 function windowsSteamPath() {
   try {

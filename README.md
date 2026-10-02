@@ -99,6 +99,38 @@ Open **http://dota-limiter-stats** (type the `http://` so Brave doesn't search f
 - Today's series score and whether Steam is locked
 - Every match: hero, win or loss, K/D/A, last hits and denies, GPM, XPM, net worth, items, game length and score, plus OpenDota, Dotabuff and STRATZ links
 - History of past days (click a day to see its matches)
+- **Teammates and enemies** for every match (click **Show teammates and enemies**)
+
+### Teammates and enemies
+
+A few minutes after a match ends, Focus Guard looks it up on [OpenDota](https://www.opendota.com), a free public Dota 2 stats site, and shows all 10 players:
+
+- Name, rank medal, estimated MMR, total games and win rate, and their last 10 results
+- Their 3 most-played heroes with games and win rate, with the hero they played this match highlighted
+- This match: K/D/A, net worth, GPM/XPM, hero damage, level and items
+
+Plus quick labels:
+
+| Label | Means |
+|---|---|
+| Spams Earthshaker: 36% of games | One hero makes up a big share of their games |
+| On their most-played hero / Comfort pick | They're on one of their best heroes |
+| First game on this hero / Only 3 games on this hero | They're on something new |
+| Possible smurf | Fewer than 250 games with a 60%+ win rate |
+| Won their last 5 / Lost their last 4 | Their current streak |
+| Party A (3) | Who queued together |
+| 8 games with you / 4 games against you | People you've met before, and how those games went |
+| You're 6-14 against Earthshaker | Your own record against that hero (on your team: your win rate with it) |
+| Usually mid | Their usual lane, when OpenDota knows it |
+| Most hero damage / Highest net worth / Most deaths | Standouts in this match |
+
+What to expect:
+
+- Matches reach OpenDota a few minutes after they end. Until then the card says it's still looking, and retries for up to 4 hours. **Try now** forces a lookup.
+- Players who hide their match data show their hero and stats, but no profile.
+- OpenDota doesn't keep everyone's full history, even for high-rank players. Those players show "Match history not on OpenDota yet" instead of game counts, and Focus Guard asks OpenDota to fetch their history for next time.
+- Details only appear after a match. Dota doesn't tell programs on your computer who's in a match while it's being played.
+- The installer asks whether to turn this on. It sends match and player IDs to OpenDota, nothing else. The free tier allows 60 requests a minute, and each match uses about 40, so a lookup takes about a minute.
 
 ## Settings
 
@@ -118,6 +150,8 @@ The easy way is to run the installer again and give different answers. You can a
 | `postGameGraceSeconds` | `90` | Time on the result screen before Steam closes. |
 | `dotaEnabled` | `true` | `false` turns the Dota limit off. |
 | `blockSafari` | `false` | macOS: `true` closes Safari whenever it opens. |
+| `opendota` | `true` | Look up teammates and enemies on OpenDota after each match. |
+| `opendotaApiKey` | none | Optional [OpenDota API key](https://www.opendota.com/api-keys) for higher limits. |
 
 The blocked and allowed sites are in `browsers/sites.json` (in this repo, or in the install folder).
 

@@ -6,6 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { execFile, execFileSync } = require("child_process");
 const { gsiPath, gsiConfig } = require("./gsi");
+const { createOpenDota, RETRY_MINUTES } = require("./opendota");
 
 const DIR = __dirname;
 const CONFIG = JSON.parse(fs.readFileSync(path.join(DIR, "config.json"), "utf8"));
@@ -138,7 +139,7 @@ function snapshot({ map = {}, player = {}, hero = {}, items = {} }) {
     hero: hero.name || null,
     level: hero.level,
     team: player.team_name,
-    ...pick(player, ["kills", "deaths", "assists", "last_hits", "denies", "gpm", "xpm", "net_worth", "gold"]),
+    ...pick(player, ["steamid", "accountid", "kills", "deaths", "assists", "last_hits", "denies", "gpm", "xpm", "net_worth", "gold"]),
     ...pick(map, ["clock_time", "radiant_score", "dire_score", "game_mode"]),
     items: slots.map((it) => (it && it.name && it.name !== "empty" ? it.name : null)),
     neutral: items.neutral0 && items.neutral0.name !== "empty" ? items.neutral0.name : null,
@@ -184,6 +185,10 @@ function onGameState(body) {
     const won = map.win_team && map.win_team === team;
     state.matches[matchid].result = won ? "win" : "loss";
     state.matches[matchid].endedAt = new Date().toISOString();
+    if (opendota) {
+      state.matches[matchid].opendota = { status: "pending", tries: 0 };
+      scheduleLookup(matchid, RETRY_MINUTES[0] * 60 * 1000);
+    }
     save();
     const t = tally();
     log(`match ${matchid} ${state.matches[matchid].result} (${t.wins}W ${t.losses}L)`);
@@ -351,6 +356,79 @@ function tick() {
   }
 }
 
+// ---------------------------------------------------------------- OpenDota lookups
+const opendota = CONFIG.opendota === false ? null : createOpenDota({ dir: DIR, apiKey: CONFIG.opendotaApiKey });
+const lookupTimers = new Map();
+
+// A match lives in today's state or in history; returns it with a function that saves it.
+function findMatch(id) {
+  if (state.matches[id]) return { match: state.matches[id], commit: save };
+  const history = loadHistory();
+  for (const day of history) {
+    if (day.matches[id]) return { match: day.matches[id], commit: () => fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2)) };
+  }
+  return null;
+}
+
+function scheduleLookup(id, delayMs) {
+  if (!opendota || !/^\d+$/.test(id) || lookupTimers.has(id)) return;
+  lookupTimers.set(id, setTimeout(() => {
+    lookupTimers.delete(id);
+    lookup(id).catch((e) => log(`OpenDota lookup for ${id} failed: ${e.message}`));
+  }, delayMs));
+}
+
+async function lookup(id) {
+  const before = findMatch(id);
+  if (!before) return;
+  let result = null;
+  let error = null;
+  try {
+    result = await opendota.fetchMatch(id, before.match.details);
+    if (!result) error = "OpenDota doesn't have this match yet";
+  } catch (e) {
+    error = e.message;
+  }
+  // Look it up again: the day may have rolled over while we waited on OpenDota.
+  const found = findMatch(id);
+  if (!found) return;
+  if (result) {
+    found.match.opendota = Object.assign({ status: "ready" }, result);
+    found.commit();
+    log(`OpenDota details saved for match ${id}`);
+    return;
+  }
+  const od = found.match.opendota || { tries: 0 };
+  od.tries = (od.tries || 0) + 1;
+  od.lastTry = new Date().toISOString();
+  od.error = error;
+  if (od.tries >= RETRY_MINUTES.length) {
+    od.status = "unavailable";
+    log(`gave up on OpenDota for match ${id}: ${error}`);
+  } else {
+    od.status = "pending";
+    scheduleLookup(id, (RETRY_MINUTES[od.tries] - RETRY_MINUTES[od.tries - 1]) * 60 * 1000);
+  }
+  found.match.opendota = od;
+  found.commit();
+}
+
+// After a restart, pick up lookups that were still waiting.
+function resumeLookups() {
+  if (!opendota) return;
+  const week = Date.now() - 7 * 24 * 3600 * 1000;
+  const days = [state].concat(loadHistory());
+  let n = 0;
+  for (const day of days) {
+    for (const [id, m] of Object.entries(day.matches)) {
+      const od = m.opendota;
+      if (od && od.status === "pending" && new Date(m.endedAt || m.startedAt).getTime() > week) {
+        scheduleLookup(id, (15 + 10 * n++) * 1000);
+      }
+    }
+  }
+}
+
 function status() {
   return {
     ...state,
@@ -361,6 +439,7 @@ function status() {
     resetHour: CONFIG.resetHour,
     dotaEnabled: DOTA_ENABLED,
     currentMatch,
+    heroLabels: opendota ? opendota.heroLabels() : {},
   };
 }
 
@@ -368,6 +447,21 @@ function status() {
 const statsServer = http.createServer((req, res) => {
     const url = req.url.split("?")[0];
     res.setHeader("cache-control", "no-store");
+    const retry = url.match(/^\/api\/lookup\/(\d+)$/);
+    if (retry && req.method === "POST") {
+      const found = findMatch(retry[1]);
+      if (!found || !opendota) {
+        res.writeHead(404);
+        return res.end();
+      }
+      found.match.opendota = { status: "pending", tries: 0 };
+      found.commit();
+      clearTimeout(lookupTimers.get(retry[1]));
+      lookupTimers.delete(retry[1]);
+      scheduleLookup(retry[1], 0);
+      res.writeHead(202);
+      return res.end();
+    }
     if (url === "/api") {
       res.setHeader("content-type", "application/json");
       return res.end(JSON.stringify({ today: status(), history: loadHistory() }));
@@ -427,5 +521,6 @@ http
   .listen(CONFIG.port, "127.0.0.1", () => log(`listening on ${CONFIG.port}`));
 
 if (DOTA_ENABLED) ensureGsiConfig();
+if (DOTA_ENABLED) resumeLookups();
 setInterval(tick, 5000);
 tick();

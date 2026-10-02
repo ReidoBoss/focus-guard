@@ -20,6 +20,7 @@ const EXPECT = {
   maxGames: Number(process.env.FG_EXPECT_MAX || 3),
   resetHour: Number(process.env.FG_EXPECT_RESET || 4),
   blockSafari: process.env.FG_EXPECT_SAFARI === "1",
+  opendota: process.env.FG_EXPECT_OPENDOTA !== "0",
 };
 const ALL_BROWSERS = IS_WIN || IS_MAC ? ["brave", "chrome", "edge", "firefox"] : ["brave", "chrome", "chromium", "edge", "firefox"];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -140,7 +141,7 @@ const gsi = (matchid, game_state, win_team) => ({
 
   const config = JSON.parse(fs.readFileSync(path.join(DEST, "dota-limit", "config.json"), "utf8"));
   check(`config matches the installer answers (${config.mode}, ${config.maxGames} games, reset ${config.resetHour})`,
-    config.mode === EXPECT.mode && config.resetHour === EXPECT.resetHour && (config.mode === "bo3" || config.maxGames === EXPECT.maxGames) && config.blockSafari === EXPECT.blockSafari);
+    config.mode === EXPECT.mode && config.resetHour === EXPECT.resetHour && (config.mode === "bo3" || config.maxGames === EXPECT.maxGames) && config.blockSafari === EXPECT.blockSafari && config.opendota === EXPECT.opendota);
 
   checkBrowserPolicies();
 
@@ -155,7 +156,8 @@ const gsi = (matchid, game_state, win_team) => ({
   // doesn't lock one game early.
   const results = EXPECT.mode === "bo3" ? ["radiant", "radiant"] : Array.from({ length: EXPECT.maxGames }, (_, i) => (i === 1 ? "dire" : "radiant"));
   for (let i = 0; i < results.length; i++) {
-    const id = String(9000000001 + i);
+    // IDs far above real ones, so the OpenDota lookup finds nothing.
+    const id = String(990000000001 + i);
     await request("http://127.0.0.1:43210/", gsi(id, "DOTA_GAMERULES_STATE_GAME_IN_PROGRESS"));
     await request("http://127.0.0.1:43210/", gsi(id, "DOTA_GAMERULES_STATE_POST_GAME", results[i]));
     await request("http://127.0.0.1:43210/", { provider: { name: "Dota 2" } });
@@ -168,7 +170,8 @@ const gsi = (matchid, game_state, win_team) => ({
   const today = (await api()).today;
   const wins = results.filter((r) => r === "radiant").length;
   check(`${wins}-${results.length - wins} recorded`, today.wins === wins && today.losses === results.length - wins && today.limitReached);
-  const d = today.matches["9000000001"].details;
+  const d = today.matches["990000000001"].details;
+  check("OpenDota lookup queued", (today.matches["990000000001"].opendota || {}).status === (EXPECT.opendota ? "pending" : undefined));
   check("match details saved", d.hero === "npc_dota_hero_juggernaut" && d.kills === 10 && d.items[0] === "item_phase_boots");
   await waitFor("Steam gets locked once the day is decided", async () => (await api()).today.lockedAt, 20);
 

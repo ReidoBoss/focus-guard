@@ -18,11 +18,12 @@ Self-control tools installed with one command on macOS, Ubuntu and Windows:
 | `dota-limit/vdf.js` | Valve KeyValues parser/writer. |
 | `dota-limit/gsi.js` | The GSI config file, shared by `setup.js` and `daemon.js`. |
 | `dota-limit/notifier.js` | Windows only. Polls `/notices` and shows toasts in the user's session. |
-| `dota-limit/stats.html` | Stats page, served by the daemon. Polls `/api`. |
+| `dota-limit/stats.html` | Stats page, served by the daemon. Polls `/api`. Also renders the teammates and enemies panel and decides its labels (`chips()`). |
+| `dota-limit/opendota.js` | After a match, fetches the scoreboard and each public player's profile from OpenDota. Requests go out one at a time, about 1.1 s apart, because the free tier allows 60 a minute. |
 | `browsers/sites.json` | Blocked and allowed sites. The only list; every browser format is generated from it. |
 | `browsers/policies.js` | Generates Chromium policy JSON, Firefox `WebsiteFilter`, and the macOS `.mobileconfig`. |
 | `browsers/extension/` | MV3 extension for Brave, Chrome, Edge and Chromium. |
-| `test/` | CI only: `fake-steam.js`, `e2e.js`, `interactive.exp`. |
+| `test/` | `opendota.test.js` (offline, safe to run anywhere) plus the CI-only `fake-steam.js`, `e2e.js` and `interactive.exp`. |
 
 Install locations: `/usr/local/focus-guard` (macOS), `/opt/focus-guard` (Linux), `C:\Program Files\FocusGuard` (Windows). Services: launchd `local.focusguard`, systemd `focus-guard`, scheduled tasks `FocusGuard` (SYSTEM) and `FocusGuardNotifier` (user).
 
@@ -41,6 +42,11 @@ Install locations: `/usr/local/focus-guard` (macOS), `/opt/focus-guard` (Linux),
 - **Never run `pkill -f` on a broad Steam pattern.** macOS launchd respawns Steam's `ipcserver` every few seconds; killing it caused a notification loop. `isSteam()` targets only `steam_osx` / `Steam Helper.app`, `steam` / `steamwebhelper` on Linux, and `steam.exe` / `steamwebhelper.exe` on Windows.
 - **macOS privacy rules block the root daemon from external drives.** So on macOS the GSI file is written by `setup.js detect` as the user, and `ensureGsiConfig()` failing there is expected. Linux and Windows can restore the file from the daemon.
 - **Steam rewrites `localconfig.vdf` when it quits**, so Steam must be closed before launch options are patched. `vdf.js` must keep round-tripping Steam's files byte for byte. Check against a real `localconfig.vdf` after any parser change.
+- **OpenDota lookups.**
+  - **When:** after `POST_GAME`, the daemon schedules `lookup()` on the `RETRY_MINUTES` timetable. The results are saved on the match as `opendota`, in today's state or in `history.json` via `findMatch()`. Pending lookups resume after a restart.
+  - **Counts include the match itself,** because the lookup runs after it ends. So 1 game on a hero means it was their first, and the "games together" labels only show above 1.
+  - **Partial history:** OpenDota often lacks a player's full history (`profile.fh_unavailable`), even for Immortal players. Their game counts come back as 0. `opendota.js` sets `fhUnavailable` and nulls `games`, and the page must skip every count-based label for them, or it labels high-rank players as new accounts.
+  - **Fake match IDs:** `e2e.js` uses IDs from 990000000001 up, so CI never looks up real matches.
 - **Port 80 can be taken.** GitHub's Windows runners reserve it, so the stats page falls back to 8787. The daemon writes the URL it actually used to `stats-url.txt`; read that instead of hard-coding the address.
 - **macOS profile identifiers** include a hash of their content (`local.focusguard.browsers.<hash>`), so a changed profile is a new identifier. The installer removes older Focus Guard profiles only after the new one is installed.
 - **Firefox** can't get the extension (release Firefox only runs Mozilla-signed add-ons). **Safari** has no URL policy, so it can only be blocked outright (`blockSafari`).
@@ -69,6 +75,7 @@ CI (`.github/workflows/test.yml`) is the real test. It runs on Ubuntu, Windows a
 Safe local checks:
 
 ```bash
+node test/opendota.test.js   # teammates and enemies, against canned OpenDota answers
 for f in dota-limit/*.js browsers/*.js browsers/extension/*.js test/*.js; do node --check "$f" || echo "FAIL $f"; done
 bash -n install.sh
 node browsers/policies.js mobileconfig brave,chrome,edge,firefox | plutil -lint -   # macOS

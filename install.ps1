@@ -159,7 +159,12 @@ if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "dota-limit\daemon.js
     $tmp = Join-Path $env:TEMP ("focus-guard-" + [guid]::NewGuid())
     New-Item -ItemType Directory -Path $tmp | Out-Null
     $zip = Join-Path $tmp "src.zip"
-    Invoke-WebRequest "https://codeload.github.com/$Repo/zip/refs/heads/main" -OutFile $zip -UseBasicParsing
+    Write-Host "Downloading Focus Guard..."
+    try {
+        Invoke-WebRequest "https://codeload.github.com/$Repo/zip/refs/heads/main" -OutFile $zip -UseBasicParsing -TimeoutSec 300
+    } catch {
+        throw "Couldn't download Focus Guard from GitHub. Check your internet connection and try again."
+    }
     Expand-Archive $zip -DestinationPath $tmp
     $Src = Join-Path $tmp "focus-guard-main"
 }
@@ -206,6 +211,7 @@ $DotaEnabled = $false
 $Mode = Prev "mode" "bo3"
 $MaxGames = [int](Prev "maxGames" 3)
 $ResetHour = [int](Prev "resetHour" 4)
+$OpenDota = [bool](Prev "opendota" $true)
 $dotaDefault = "n"
 if (Prev "dotaEnabled" $true) { $dotaDefault = "y" }
 if (YesNo "Set up the Dota 2 limit?" $dotaDefault) {
@@ -220,6 +226,15 @@ if (YesNo "Set up the Dota 2 limit?" $dotaDefault) {
         $Mode = "bo3"
     }
     $ResetHour = Number "What hour does a new day start? (0-23, so a 2 AM game counts toward the night before)" $ResetHour 0 23
+    if ($Interactive) {
+        Write-Host ""
+        Write-Host "The stats page can show your teammates and enemies after each match: rank, most-played"
+        Write-Host "heroes, smurfs, parties, streaks, and your record with and against them. This sends the"
+        Write-Host "match ID to OpenDota (opendota.com, a free public Dota stats site)."
+    }
+    $odDefault = "n"
+    if ($OpenDota) { $odDefault = "y" }
+    $OpenDota = YesNo "Look up the other 9 players on OpenDota after each match?" $odDefault
 }
 
 if ($Interactive) {
@@ -257,6 +272,7 @@ if ($Interactive) {
     Bold "Summary"
     if ($DotaEnabled) {
         if ($Mode -eq "bo3") { Write-Host "  Dota 2 limit:     best of 3, new day at ${ResetHour}:00" } else { Write-Host "  Dota 2 limit:     $MaxGames games, new day at ${ResetHour}:00" }
+        if ($OpenDota) { Write-Host "  Player lookups:   on (OpenDota)" } else { Write-Host "  Player lookups:   off" }
     } else {
         Write-Host "  Dota 2 limit:     off"
     }
@@ -275,6 +291,7 @@ $Choices = [ordered]@{
     resetHour   = $ResetHour
     browsers    = ($Browsers -join ",")
     blockSafari = $false
+    opendota    = $OpenDota
 }
 $ChoicesJson = $Choices | ConvertTo-Json -Compress
 

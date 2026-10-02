@@ -209,9 +209,11 @@ SCRIPT="${BASH_SOURCE[0]:-}"
 if [ -n "$SCRIPT" ] && [ -f "$(dirname "$SCRIPT")/dota-limit/daemon.js" ]; then
   SRC="$(cd "$(dirname "$SCRIPT")" && pwd)"
 else
+  echo "Downloading Focus Guard..."
   TMP="$(mktemp -d)"
   trap 'rm -rf "$TMP"' EXIT
-  curl -fsSL "https://codeload.github.com/$REPO/tar.gz/refs/heads/main" | tar -xz -C "$TMP"
+  curl -fsSL --connect-timeout 20 --max-time 300 --retry 3 "https://codeload.github.com/$REPO/tar.gz/refs/heads/main" | tar -xz -C "$TMP" \
+    || die "Couldn't download Focus Guard from GitHub. Check your internet connection and try again."
   SRC="$TMP/focus-guard-main"
 fi
 
@@ -246,6 +248,7 @@ DOTA_ENABLED=false
 MODE="$(prev mode bo3)"
 MAX_GAMES="$(prev maxGames 3)"
 RESET_HOUR="$(prev resetHour 4)"
+OPENDOTA="$(prev opendota true)"
 tell ""
 tell "$(bold "1. Dota 2 daily limit")"
 tell "Counts your matches and closes Steam for the rest of the day once you're done."
@@ -261,6 +264,15 @@ if yesno "Set up the Dota 2 limit?" "$( [ "$(prev dotaEnabled true)" = true ] &&
     MODE=bo3
   fi
   RESET_HOUR="$(number "What hour does a new day start? (0-23, so a 2 AM game counts toward the night before)" "$RESET_HOUR" 0 23)"
+  tell ""
+  tell "The stats page can show your teammates and enemies after each match: rank, most-played"
+  tell "heroes, smurfs, parties, streaks, and your record with and against them. This sends the"
+  tell "match ID to OpenDota (opendota.com, a free public Dota stats site)."
+  if yesno "Look up the other 9 players on OpenDota after each match?" "$( [ "$OPENDOTA" = true ] && echo y || echo n )"; then
+    OPENDOTA=true
+  else
+    OPENDOTA=false
+  fi
 fi
 
 # Browsers
@@ -318,6 +330,7 @@ tell ""
 tell "$(bold "Summary")"
 if [ "$DOTA_ENABLED" = true ]; then
   if [ "$MODE" = bo3 ]; then tell "  Dota 2 limit:     best of 3, new day at $RESET_HOUR:00"; else tell "  Dota 2 limit:     $MAX_GAMES games, new day at $RESET_HOUR:00"; fi
+  tell "  Player lookups:   $( [ "$OPENDOTA" = true ] && echo "on (OpenDota)" || echo "off" )"
 else
   tell "  Dota 2 limit:     off"
 fi
@@ -329,8 +342,8 @@ if [ "$INTERACTIVE" = 1 ] && ! yesno "Install with these settings?" y; then
   exit 0
 fi
 
-CHOICES="$("$NODE" -e 'const [d,m,g,h,b,s]=process.argv.slice(1);console.log(JSON.stringify({dotaEnabled:d==="true",mode:m,maxGames:Number(g),resetHour:Number(h),browsers:b,blockSafari:s==="true"}))' \
-  "$DOTA_ENABLED" "$MODE" "$MAX_GAMES" "$RESET_HOUR" "$BROWSERS" "$BLOCK_SAFARI")"
+CHOICES="$("$NODE" -e 'const [d,m,g,h,b,s,o]=process.argv.slice(1);console.log(JSON.stringify({dotaEnabled:d==="true",mode:m,maxGames:Number(g),resetHour:Number(h),browsers:b,blockSafari:s==="true",opendota:o==="true"}))' \
+  "$DOTA_ENABLED" "$MODE" "$MAX_GAMES" "$RESET_HOUR" "$BROWSERS" "$BLOCK_SAFARI" "$OPENDOTA")"
 
 # ---------------------------------------------------------------- files
 say "Installing to $DEST"

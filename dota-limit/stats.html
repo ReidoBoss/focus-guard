@@ -87,6 +87,41 @@
     .portrait { width: 80px; height: 45px; }
     .match-top .badge { grid-column: 2; justify-self: start; }
   }
+
+  .players-bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .players-bar button { font: 600 13px Inter, system-ui, sans-serif; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .players-bar button:hover { border-color: var(--muted); }
+  .players { border-top: 1px solid var(--line); padding: 4px 16px 16px; }
+  .team-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 16px 0 8px; flex-wrap: wrap; }
+  .team-head b { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+  .team-head b.ally { color: var(--win); } .team-head b.enemy { color: var(--loss); }
+  .team-head span { color: var(--muted); font-size: 12px; }
+  .player { display: grid; grid-template-columns: 64px 1fr; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .player:first-of-type { border-top: 0; }
+  .player.me { background: rgba(245,182,66,.06); border-radius: 8px; padding: 10px 8px; margin: 0 -8px; }
+  .p-hero { width: 64px; height: 36px; border-radius: 6px; background: var(--panel-2) center/cover; }
+  .p-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .p-name { font-weight: 700; }
+  .p-name a { color: inherit; text-decoration: none; } .p-name a:hover { text-decoration: underline; }
+  .rank { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); color: var(--accent); }
+  .p-stats { font: 500 12px "JetBrains Mono", monospace; color: var(--muted); margin-top: 2px; }
+  .p-stats b { color: var(--text); }
+  .p-items { display: flex; gap: 3px; margin-top: 6px; flex-wrap: wrap; }
+  .p-items i { width: 30px; height: 22px; border-radius: 3px; background: var(--panel-2) center/cover; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .chip { font-size: 12px; padding: 3px 8px; border-radius: 6px; background: var(--panel-2); color: var(--muted); }
+  .chip.good { color: var(--win); background: var(--win-bg); }
+  .chip.bad { color: var(--loss); background: var(--loss-bg); }
+  .chip.info { color: var(--live); background: rgba(96,165,250,.12); }
+  .chip.party { color: #c4b5fd; background: rgba(167,139,250,.14); }
+  .tops { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--muted); align-items: center; }
+  .top { display: flex; align-items: center; gap: 6px; }
+  .top i { width: 36px; height: 20px; border-radius: 3px; background: var(--panel-2) center/cover; }
+  .top.current i { outline: 2px solid var(--accent); }
+  .form { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: middle; }
+  .form i { width: 7px; height: 12px; border-radius: 2px; background: var(--line); }
+  .form i.win { background: var(--win); } .form i.loss { background: var(--loss); }
+  @media (max-width: 600px) { .player { grid-template-columns: 48px 1fr; } .p-hero { width: 48px; height: 27px; } }
 </style>
 </head>
 <body>
@@ -115,7 +150,9 @@
 const CDN = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react";
 const heroImg = (n) => n && `${CDN}/heroes/${n.replace("npc_dota_hero_", "")}.png`;
 const itemImg = (n) => n && `${CDN}/items/${n.replace("item_", "")}.png`;
-const pretty = (n) => (n ? n.replace("npc_dota_hero_", "").split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ") : "Unknown hero");
+// Real hero names come from OpenDota when the service has them; otherwise tidy the internal name.
+let HERO_LABELS = {};
+const pretty = (n) => (!n ? "Unknown hero" : HERO_LABELS[n] || n.replace("npc_dota_hero_", "").split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" "));
 const clock = (s) => (s == null ? "-" : `${Math.floor(Math.max(s, 0) / 60)}:${String(Math.max(s, 0) % 60).padStart(2, "0")}`);
 const num = (v) => (v == null ? "-" : Number(v).toLocaleString());
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -161,7 +198,150 @@ function matchCard(id, m) {
     </div>
     ${stats}
     ${items || links ? `<div class="items">${items}${neutral}${links}</div>` : ""}
+    ${playersSection(id, m)}
   </div>`;
+}
+
+
+// ---------------------------------------------------------------- teammates and enemies
+const RANKS = ["", "Herald", "Guardian", "Crusader", "Archon", "Legend", "Ancient", "Divine", "Immortal"];
+const ROLES = { 1: "safe lane", 2: "mid", 3: "off lane", 4: "jungle" };
+const pct = (w, g) => (g ? Math.round((100 * w) / g) : 0);
+const openPlayers = new Set();
+
+function rankLabel(p) {
+  const rt = p.rankTier || (p.profile && p.profile.rankTier);
+  if (!rt) return "";
+  const tier = Math.floor(rt / 10), stars = rt % 10;
+  const lb = p.profile && p.profile.leaderboardRank;
+  return tier === 8 ? `Immortal${lb ? " #" + lb : ""}` : `${RANKS[tier] || "?"}${stars ? " " + stars : ""}`;
+}
+
+function avgRank(players) {
+  const tiers = players.map((p) => p.rankTier).filter(Boolean);
+  if (!tiers.length) return "";
+  const avg = Math.round(tiers.reduce((a, b) => a + b, 0) / tiers.length);
+  return `avg ${rankLabel({ rankTier: avg })} (${tiers.length} ranked)`;
+}
+
+// Every chip is a quick read: who's dangerous, who's tilted, who you know.
+function chips(p, ctx) {
+  const out = [];
+  const add = (tone, text) => out.push(`<span class="chip ${tone}">${esc(text)}</span>`);
+  const prof = p.profile;
+  if (p.isMe) add("info", "You");
+  if (p.partyLabel) add("party", p.partyLabel);
+  if (!p.accountId) add("", "Private profile");
+  if (prof && prof.fhUnavailable) add("", "Match history not on OpenDota yet");
+  if (prof && prof.games != null) {
+    const wr = pct(prof.wins, prof.games);
+    if (prof.games < 250 && wr >= 60) add("bad", `Possible smurf: ${prof.games} games, ${wr}% wins`);
+    else if (prof.games < 100) add("", `New account: ${prof.games} games`);
+    const top = prof.heroes[0];
+    if (top && prof.games >= 50 && top.games / prof.games >= 0.2) {
+      add("bad", `Spams ${pretty(top.hero)}: ${pct(top.games, prof.games)}% of games`);
+    }
+  }
+  if (p.onHero && prof) {
+    const rank = prof.heroes.findIndex((h) => h.hero === p.hero);
+    // Counts include this match, so 1 game means it was their first.
+    if (p.onHero.games <= 1) add("good", "First game on this hero");
+    else if (rank === 0) add("bad", `On their most-played hero (${p.onHero.games} games, ${pct(p.onHero.win, p.onHero.games)}%)`);
+    else if (rank > 0 && rank < 3 && p.onHero.games >= 10) add("bad", `Comfort pick: #${rank + 1} hero, ${p.onHero.games} games`);
+    else if (p.onHero.games < 5) add("good", `Only ${p.onHero.games} games on this hero`);
+  }
+  if (prof && prof.recent.length) {
+    // Includes this match: OpenDota is asked after it ends.
+    let streak = 0;
+    while (streak < prof.recent.length && prof.recent[streak].win === prof.recent[0].win) streak++;
+    if (streak >= 3) add(prof.recent[0].win ? "bad" : "good", `${prof.recent[0].win ? "Won" : "Lost"} their last ${streak}`);
+    const roles = {};
+    for (const r of prof.recent) if (r.laneRole) roles[r.laneRole] = (roles[r.laneRole] || 0) + 1;
+    const best = Object.entries(roles).sort((a, b) => b[1] - a[1])[0];
+    if (best && best[1] >= 4) add("", `Usually ${ROLES[best[0]] || "lane " + best[0]} (${best[1]} of last ${prof.recent.length})`);
+  }
+  if (p.together) {
+    const t = p.together;
+    // These counts include this match.
+    if (t.withGames > 1) add("info", `${t.withGames} games with you, ${pct(t.withWin, t.withGames)}% won`);
+    if (t.againstGames > 1) add("info", `${t.againstGames} games against you, you won ${pct(t.againstWin, t.againstGames)}%`);
+  }
+  if (p.youWithHero && !p.isMe) {
+    const h = p.youWithHero;
+    if (ctx.ally && h.withGames >= 5) add(pct(h.withWin, h.withGames) >= 50 ? "good" : "bad", `You win ${pct(h.withWin, h.withGames)}% with ${pretty(p.hero)} on your team`);
+    if (!ctx.ally && h.againstGames >= 5) add(pct(h.againstWin, h.againstGames) >= 50 ? "good" : "bad", `You're ${h.againstWin}-${h.againstGames - h.againstWin} against ${pretty(p.hero)}`);
+  }
+  if (ctx.most.heroDamage === p) add("", "Most hero damage");
+  if (ctx.most.netWorth === p) add("", "Highest net worth");
+  if (ctx.most.deaths === p && p.deaths >= 8) add("", "Most deaths");
+  return out.join("");
+}
+
+function playerRow(p, ctx) {
+  const prof = p.profile;
+  const items = p.items.map((n) => `<i title="${esc(n || "empty")}" style="${n ? `background-image:url(${itemImg(n)})` : ""}"></i>`).join("");
+  const name = p.accountId
+    ? `<a href="https://www.opendota.com/players/${p.accountId}" target="_blank" rel="noopener">${esc(p.name || "Unknown")}</a>`
+    : esc(p.name || "Anonymous");
+  const rank = rankLabel(p);
+  const mmr = prof && prof.estimatedMmr ? ` · ~${num(prof.estimatedMmr)} MMR` : "";
+  const record = prof && prof.games ? ` · ${num(prof.games)} games, ${pct(prof.wins, prof.games)}% wins` : "";
+  const form = prof && prof.recent.length
+    ? `<span class="form" title="Last ${prof.recent.length} games, newest first">${prof.recent.map((r) => `<i class="${r.win ? "win" : "loss"}"></i>`).join("")}</span>`
+    : "";
+  const tops = prof && prof.heroes.length
+    ? `<div class="tops">Most played:${prof.heroes.slice(0, 3).map((h) =>
+        `<span class="top ${h.hero === p.hero ? "current" : ""}" title="${esc(pretty(h.hero))}"><i style="background-image:url(${heroImg(h.hero)})"></i>${h.games} · ${pct(h.win, h.games)}%</span>`).join("")} ${form}</div>`
+    : "";
+  return `<div class="player ${p.isMe ? "me" : ""}">
+    <div class="p-hero" title="${esc(pretty(p.hero))}" style="${p.hero ? `background-image:url(${heroImg(p.hero)})` : ""}"></div>
+    <div>
+      <div class="p-line"><span class="p-name">${name}</span>${rank ? `<span class="rank">${esc(rank)}</span>` : ""}<span class="sub">${esc(pretty(p.hero))}${mmr}${record}</span></div>
+      <div class="p-stats"><b>${p.kills}/${p.deaths}/${p.assists}</b> · ${num(p.netWorth)} NW · ${p.gpm}/${p.xpm} GPM/XPM · ${num(p.heroDamage)} dmg · Lvl ${p.level}</div>
+      <div class="p-items">${items}${p.neutral ? `<i title="${esc(p.neutral)}" style="border-radius:50%;width:22px;background-image:url(${itemImg(p.neutral)})"></i>` : ""}</div>
+      <div class="chips">${chips(p, ctx)}</div>
+      ${tops}
+    </div>
+  </div>`;
+}
+
+function playersSection(id, m) {
+  const od = m.opendota;
+  if (!od) return "";
+  if (od.status !== "ready") {
+    const msg = od.status === "unavailable"
+      ? "OpenDota never got this match, so there are no player details."
+      : `Looking up the other players on OpenDota. Matches show up there a few minutes after they end.${od.tries ? ` (tried ${od.tries}x)` : ""}`;
+    return `<div class="players-bar">${msg}<button data-lookup="${id}">Try now</button></div>`;
+  }
+  const players = od.players.slice();
+  const me = players.find((p) => p.isMe);
+  const myTeam = me ? me.team : m.details && m.details.team;
+
+  // Letter each party that has two or more people in it.
+  const parties = {};
+  for (const p of players) if (p.partyId != null && p.partySize > 1) (parties[p.partyId] = parties[p.partyId] || []).push(p);
+  let letter = 65;
+  for (const group of Object.values(parties)) {
+    if (group.length < 2) continue;
+    const label = `Party ${String.fromCharCode(letter++)} (${group.length})`;
+    for (const p of group) p.partyLabel = label;
+  }
+
+  const most = {};
+  for (const k of ["heroDamage", "netWorth", "deaths"]) most[k] = players.reduce((a, b) => (b[k] > a[k] ? b : a));
+  const team = (t) => players.filter((p) => p.team === t).sort((a, b) => (b.isMe ? 1 : 0) - (a.isMe ? 1 : 0) || a.slot - b.slot);
+  const enemyTeam = myTeam === "radiant" ? "dire" : "radiant";
+  const block = (t, ally) => `
+    <div class="team-head"><b class="${ally ? "ally" : "enemy"}">${ally ? "Your team" : "Enemies"} · ${t === "radiant" ? "Radiant" : "Dire"}</b><span>${esc(avgRank(team(t)))}</span></div>
+    ${team(t).map((p) => playerRow(p, { ally, most })).join("")}`;
+
+  const open = openPlayers.has(id);
+  return `<div class="players-bar">
+      <button data-players="${id}">${open ? "Hide players" : "Show teammates and enemies"}</button>
+      <span>${od.duration ? clock(od.duration) + " · " : ""}${od.radiantScore}-${od.direScore}</span>
+    </div>
+    ${open ? `<div class="players">${block(myTeam || "radiant", true)}${block(enemyTeam, false)}</div>` : ""}`;
 }
 
 function renderMatches(matches) {
@@ -172,6 +352,7 @@ function renderMatches(matches) {
 let openDay = null;
 
 function render({ today, history }) {
+  HERO_LABELS = today.heroLabels || {};
   const { list, wins, losses } = tally(today.matches);
   document.getElementById("daylabel").textContent = "· " + new Date(today.day + "T12:00").toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 
@@ -222,6 +403,24 @@ async function refresh() {
     render(data);
   } catch {}
 }
+
+document.addEventListener("click", async (e) => {
+  const toggle = e.target.closest("[data-players]");
+  if (toggle) {
+    const id = toggle.dataset.players;
+    if (openPlayers.has(id)) openPlayers.delete(id);
+    else openPlayers.add(id);
+    if (last) render(last);
+    return;
+  }
+  const retry = e.target.closest("[data-lookup]");
+  if (retry) {
+    retry.disabled = true;
+    retry.textContent = "Looking up...";
+    try { await fetch(`/api/lookup/${retry.dataset.lookup}`, { method: "POST" }); } catch {}
+    setTimeout(refresh, 4000);
+  }
+});
 
 document.getElementById("history").addEventListener("click", (e) => {
   const row = e.target.closest(".day");

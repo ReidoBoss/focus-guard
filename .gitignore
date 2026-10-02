@@ -10,3 +10,4 @@ dota-limit/stats-url.txt
 dota-limit/notifier.vbs
 brave/focus-guard.mobileconfig
 *.focus-guard.bak
+dota-limit/opendota-constants.json
