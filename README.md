@@ -100,6 +100,39 @@ Open **http://dota-limiter-stats** (type the `http://` so Brave doesn't search f
 - Every match: hero, win or loss, K/D/A, last hits and denies, GPM, XPM, net worth, items, game length and score, plus OpenDota, Dotabuff and STRATZ links
 - History of past days (click a day to see its matches)
 - **Teammates and enemies** for every match (click **Show teammates and enemies**)
+- **Tilt check**, **lane results** and a **gold graph** on each match
+- **Your heroes**, a **counter-pick lookup** for the draft, and a **weekly summary**
+
+The links at the top of the page jump to each section.
+
+### Your heroes
+
+Your last 90 days from OpenDota, one row per hero: games, win rate, average KDA, GPM, and a trend that compares your win rate in the last 30 days with the 60 before it. At the top: your best and worst hero (10+ games) and the one improving the most. Focus Guard finds your account from Steam's sign-in file, so this works before your first tracked match.
+
+### Tilt check
+
+After a loss, a notification tells you what went wrong and to take a 10 minute break before queueing again. It starts with what Dota reports live (deaths, GPM against your usual on that hero). Once OpenDota parses the replay, the match card adds more, and you get a second notification if the replay finds something new:
+
+- "Lost your lane: 1.5k gold behind Invoker at 10 minutes (-20 last hits)."
+- "Your team was 9k gold ahead at 24:00 and still lost."
+- "You died 12 times (your teammates averaged 5)."
+
+It doesn't interrupt the last game of the day, because Steam is about to close anyway.
+
+### Lane results and gold graph
+
+Focus Guard asks OpenDota to parse each replay, which usually takes a few minutes. The match card then shows each lane at 10 minutes (who won, by how much gold), how you did against your lane opponent, and your team's gold lead minute by minute.
+
+### Counter-picks
+
+- **On each enemy:** "Beaten by" shows the heroes with the best win rate against them. Heroes you play yourself are highlighted.
+- **Counter-pick lookup** (use it during the draft): type an enemy hero to see what beats it, your own record against it, and which of your heroes are good answers.
+
+The win rates come from OpenDota's high-level parsed games, and only pairs with 30+ games count.
+
+### Weekly summary
+
+A section for each week (Monday to Sunday): record, days played, best hero, worst matchup, how many days the limit stopped you, how many times you tried to reopen Steam after it did, and your average KDA. Use **Previous** and **Next** to look at other weeks. When a new week starts, you get a notification about the last one.
 
 ### Teammates and enemies
 
@@ -152,6 +185,10 @@ The easy way is to run the installer again and give different answers. You can a
 | `blockSafari` | `false` | macOS: `true` closes Safari whenever it opens. |
 | `opendota` | `true` | Look up teammates and enemies on OpenDota after each match. |
 | `opendotaApiKey` | none | Optional [OpenDota API key](https://www.opendota.com/api-keys) for higher limits. |
+| `tiltCheck` | `true` | Notification after a loss. |
+| `parseReplays` | `true` | Ask OpenDota to parse replays for lane results and the gold graph. |
+| `weeklySummary` | `true` | Notification when a new week starts. |
+| `accountId` | from Steam | Your Dota account ID, used for the hero report and counter-picks. |
 
 The blocked and allowed sites are in `browsers/sites.json` (in this repo, or in the install folder).
 

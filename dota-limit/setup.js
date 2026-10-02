@@ -28,10 +28,13 @@ const DEFAULTS = {
   dotaEnabled: true,
   blockSafari: false,
   opendota: true,
+  tiltCheck: true,
+  parseReplays: true,
+  weeklySummary: true,
 };
 
 // Installer answers that map straight onto config.json.
-const CHOICE_KEYS = ["dotaEnabled", "mode", "maxGames", "resetHour", "blockSafari", "opendota"];
+const CHOICE_KEYS = ["dotaEnabled", "mode", "maxGames", "resetHour", "blockSafari", "opendota", "tiltCheck"];
 
 function windowsSteamPath() {
   try {
@@ -120,10 +123,34 @@ function patchLaunchOptions(root) {
   return patched;
 }
 
+// Your Dota account ID: the account Steam signed in with most recently.
+function steamAccountId(roots) {
+  let best = null;
+  for (const root of roots) {
+    const file = path.join(root, "config", "loginusers.vdf");
+    if (!fs.existsSync(file)) continue;
+    const users = vdf.find(vdf.parse(fs.readFileSync(file, "utf8")), "users");
+    if (!users || !Array.isArray(users[1])) continue;
+    for (const [steamid, fields] of users[1]) {
+      if (!Array.isArray(fields)) continue;
+      const get = (k) => (vdf.find(fields, k) || [])[1];
+      const score = (get("MostRecent") === "1" ? 1e12 : 0) + Number(get("Timestamp") || 0);
+      if (!best || score > best.score) best = { steamid, score };
+    }
+  }
+  if (!best) return null;
+  try {
+    const id = BigInt(best.steamid) - BigInt("76561197960265728");
+    return id > BigInt(0) ? Number(id) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function detect(port) {
   const roots = steamRoots();
   const dotaDir = findDota(roots);
-  const result = { steamRoots: roots, dotaDir, gsiWritten: false, launchOptionsPatched: [] };
+  const result = { steamRoots: roots, dotaDir, accountId: steamAccountId(roots), gsiWritten: false, launchOptionsPatched: [] };
   if (dotaDir) {
     const file = gsiPath(dotaDir);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -146,6 +173,7 @@ function writeConfig(file, user, detected, choices) {
   for (const k of CHOICE_KEYS) if (choices[k] !== undefined) picked[k] = choices[k];
   const config = Object.assign({}, DEFAULTS, existing, picked, { user });
   if (detected.dotaDir) config.dotaDir = detected.dotaDir;
+  if (detected.accountId) config.accountId = detected.accountId;
   fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
   return config;
 }

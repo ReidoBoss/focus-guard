@@ -7,6 +7,7 @@ const path = require("path");
 const vm = require("vm");
 const assert = require("assert");
 const { createOpenDota, accountIdFromSteamId } = require("../dota-limit/opendota");
+const insights = require("../dota-limit/insights");
 
 const ME = 1000;
 const MATCH = "8123456789";
@@ -115,10 +116,37 @@ async function fakeFetch(url, method) {
   const handlers = [];
   const el = (id) => (els[id] = els[id] || { id, innerHTML: "", textContent: "", className: "", addEventListener() {} });
   const now = new Date().toISOString();
+  const H = (n) => `npc_dota_hero_${n}`;
+  // What the service adds after the scoreboard: counter-picks, then the parsed replay.
+  const ready = Object.assign({ status: "ready" }, result);
+  ready.counters = { [H("earthshaker")]: insights.counters([{ hero: H("axe"), games_played: 100, wins: 40 }, { hero: H("bane"), games_played: 60, wins: 30 }]) };
+  const parsedReplay = {
+    goldAdv: [0, 500, 1500, 3000, -1000, -4000],
+    players: result.players.map((p, i) => ({ slot: p.slot, team: p.team, hero: p.hero, lane: [1, 2, 3, 1, 3][i % 5], gold10: 3000 + 100 * i, lh10: 30 + i })),
+  };
+  ready.parse = { status: "ready" };
+  ready.myTeam = "radiant";
+  ready.lanes = insights.laneResults(parsedReplay);
+  ready.lane = insights.yourLane(parsedReplay, 0);
+  ready.goldAdv = parsedReplay.goldAdv;
+  const reportData = {
+    status: "ready",
+    report: insights.heroReport([
+      ...Array.from({ length: 12 }, (_, i) => ({ hero: H("juggernaut"), player_slot: 0, radiant_win: i < 9, start_time: Math.floor(Date.now() / 1000) - i * 86400, kills: 9, deaths: 3, assists: 7, gold_per_min: 640 })),
+      ...Array.from({ length: 20 }, (_, i) => ({ hero: H("axe"), player_slot: 0, radiant_win: i < 9, start_time: Math.floor(Date.now() / 1000) - i * 86400 * 4, kills: 5, deaths: 6, assists: 12, gold_per_min: 450 })),
+    ]),
+  };
+  const weeklyData = Object.assign(insights.weekly([{ day: "2026-10-01", lockedAt: "x", blockedLaunches: 2, matches: {
+    a: { result: "win", details: { hero: H("juggernaut"), kills: 9, deaths: 3, assists: 7 } },
+    b: { result: "win", details: { hero: H("juggernaut"), kills: 9, deaths: 3, assists: 7 } },
+    c: { result: "loss", details: { hero: H("axe"), kills: 3, deaths: 9, assists: 7 } } } }], "2026-09-28"), { thisWeek: "2026-09-28", firstWeek: "2026-09-21" });
+  const lossTilt = insights.tiltCheck({ details: { hero: H("juggernaut"), deaths: 13, gpm: 300, team: "radiant" }, report: reportData.report });
+  const counterData = { hero: H("earthshaker"), status: "ready", counters: ready.counters[H("earthshaker")], you: { againstGames: 20, againstWin: 6 }, yourPicks: [] };
+  const routes2 = { "/api/report": reportData, "/api/weekly": weeklyData, [`/api/counters/${H("earthshaker")}`]: counterData };
   const api = {
     today: {
-      day: "2026-10-02", matches: { [MATCH]: { startedAt: now, endedAt: now, result: "win", details: { hero: "npc_dota_hero_antimage", team: "radiant", kills: 1 }, opendota: Object.assign({ status: "ready" }, result) },
-        "8123456790": { startedAt: now, result: "loss", details: {}, opendota: { status: "pending", tries: 2 } } },
+      day: "2026-10-02", matches: { [MATCH]: { startedAt: now, endedAt: now, result: "win", details: { hero: "npc_dota_hero_antimage", team: "radiant", kills: 1 }, opendota: ready },
+        "8123456790": { startedAt: now, result: "loss", details: {}, tilt: lossTilt, opendota: { status: "pending", tries: 2 } } },
       wins: 1, losses: 1, live: false, limitReached: false, mode: "bo3", resetHour: 4, dotaEnabled: true, heroLabels: od.heroLabels(),
     },
     history: [],
@@ -127,7 +155,10 @@ async function fakeFetch(url, method) {
     console, Date, Math, JSON, Object, Array, String, Number, Set, Map, Promise, encodeURIComponent,
     setInterval: () => 0,
     setTimeout,
-    fetch: async () => ({ json: async () => JSON.parse(JSON.stringify(api)) }),
+    fetch: async (url) => {
+      const route = Object.keys(routes2).find((r) => url.split("?")[0] === r);
+      return { json: async () => JSON.parse(JSON.stringify(route ? routes2[route] : api)) };
+    },
     document: { getElementById: el, addEventListener: (type, fn) => handlers.push(fn) },
   };
   vm.runInNewContext(script, context);
@@ -167,6 +198,33 @@ async function fakeFetch(url, method) {
   const row8 = page.split('class="player ').find((r) => r.includes("player8"));
   assert.ok(!/New account|smurf|First game/.test(row8), "no game-count labels without full history");
   console.log(`ok: stats page renders the panel (${expect.length} details checked)`);
+
+  const has = (where, texts) => {
+    for (const text of texts) assert.ok(where.includes(text), `page shows "${text}"`);
+    return texts.length;
+  };
+  let n = has(page, [
+    "Tilt check", "You died 13 times", "300 GPM, well under your usual", "Take a 10 minute break", "Based on the live match feed",
+    "Lanes at 10 minutes", "Bottom (you)", "Top", "Middle", "You against", 'class="graph"', "Your team&#39;s gold lead".replace("&#39;", "'"),
+    "Beaten by:", "60%", "(you play it)",
+  ]);
+  console.log(`ok: tilt check, lanes, gold graph and counter-picks on the match card (${n} details)`);
+
+  const reportHtml = els.report.innerHTML;
+  n = has(reportHtml, ["Juggernaut", "Axe", "32 matches, 56% wins", "Best: Juggernaut", "Worst: Axe", "75%", "9/3/7", "640", "Trend", "today"]);
+  console.log(`ok: your heroes table (${n} details)`);
+
+  const weeklyHtml = els["weekly-box"].innerHTML;
+  n = has(weeklyHtml, ["Record", "2-1", "67% wins in 3 games", "Best hero", "Juggernaut", "Limit stopped you", "1 day", "Tried to reopen Steam", "2 times", "Average KDA", "7/5/7", "(this week)", "Previous"]);
+  assert.ok(/data-week="2026-10-05" disabled/.test(weeklyHtml), "can't go past this week");
+  console.log(`ok: weekly summary (${n} details)`);
+
+  for (const h of handlers) await h({ type: "input", target: { id: "counter-input", value: "earthshaker", closest: () => null } });
+  await new Promise((r) => setTimeout(r, 50));
+  const counterHtml = els["counter-result"].innerHTML;
+  n = has(counterHtml, ["Beaten by:", "Axe 60%", "Bane 50%", "You&#39;re 6-14 against Earthshaker".replace("&#39;", "'"), "Your best answer: <b>Axe</b> (20 games, 45% for you)"]);
+  assert.ok(els["hero-list"].innerHTML.includes('<option value="Earthshaker">'), "hero name suggestions for the lookup box");
+  console.log(`ok: counter-pick lookup box (${n} details)`);
   console.log("\nall checks passed");
 })().catch((e) => {
   console.error(e.stack || e.message);

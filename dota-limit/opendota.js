@@ -154,6 +154,78 @@ function createOpenDota({ dir, apiKey, fetchJson = httpJson, spacingMs = 1100 })
     return { byHero, byPeer };
   }
 
+  // Your record with and against each hero, for the counter-pick lookup.
+  const mineCache = new Map();
+  async function myHeroes(accountId) {
+    const hit = mineCache.get(accountId);
+    if (hit && Date.now() - hit.at < 3600 * 1000) return hit.data;
+    const data = (await me(accountId, await constants())).byHero;
+    mineCache.set(accountId, { at: Date.now(), data });
+    return data;
+  }
+
+  // Your last 90 days, for the hero report. One request.
+  async function recentMatches(accountId) {
+    const consts = await constants();
+    const fields = ["hero_id", "kills", "deaths", "assists", "start_time", "player_slot", "radiant_win", "gold_per_min", "last_hits", "duration"];
+    const rows = await get(`/players/${accountId}/matches?date=90&${fields.map((f) => "project=" + f).join("&")}`);
+    return (rows || []).map((r) => Object.assign({}, r, { hero: consts.heroes[r.hero_id] || null }));
+  }
+
+  // How a hero does against every other hero, from OpenDota's high-level parsed games.
+  // Changes slowly, so it's cached on disk for a week.
+  const matchupFile = path.join(dir, "opendota-matchups.json");
+  let matchupCache = null;
+  async function matchups(hero) {
+    const consts = await constants();
+    if (!matchupCache) {
+      try {
+        matchupCache = JSON.parse(fs.readFileSync(matchupFile, "utf8"));
+      } catch (e) {
+        matchupCache = {};
+      }
+    }
+    const hit = matchupCache[hero];
+    if (hit && Date.now() - hit.at < CONSTANTS_TTL) return hit.rows;
+    const id = Object.keys(consts.heroes).find((key) => consts.heroes[key] === hero);
+    if (!id) return [];
+    const rows = await get(`/heroes/${id}/matchups`);
+    const named = (rows || []).map((r) => ({ hero: consts.heroes[r.hero_id] || null, games_played: r.games_played, wins: r.wins }));
+    matchupCache[hero] = { at: Date.now(), rows: named };
+    fs.writeFileSync(matchupFile, JSON.stringify(matchupCache));
+    return named;
+  }
+
+  // Asks OpenDota to parse the replay, which adds lanes and per-minute gold. Takes a minute or so.
+  async function requestParse(matchId) {
+    const r = await get(`/request/${matchId}`, "POST");
+    return r && r.job ? r.job.jobId : null;
+  }
+
+  // The parsed parts of a match, or null if the replay isn't parsed yet.
+  async function fetchParsed(matchId) {
+    const consts = await constants();
+    const m = await get(`/matches/${matchId}`);
+    if (!m || !m.od_data || !m.od_data.has_parsed || !Array.isArray(m.players)) return null;
+    const at10 = (arr) => (Array.isArray(arr) && arr.length > 10 ? arr[10] : null);
+    return {
+      goldAdv: m.radiant_gold_adv || [],
+      xpAdv: m.radiant_xp_adv || [],
+      players: m.players.map((p) => ({
+        slot: p.player_slot,
+        team: p.player_slot < 128 ? "radiant" : "dire",
+        hero: consts.heroes[p.hero_id] || null,
+        lane: p.lane,
+        laneRole: p.lane_role,
+        laneEfficiency: p.lane_efficiency_pct,
+        gold10: at10(p.gold_t),
+        xp10: at10(p.xp_t),
+        lh10: at10(p.lh_t),
+        dn10: at10(p.dn_t),
+      })),
+    };
+  }
+
   // Returns the full scoreboard with profiles, or null if OpenDota doesn't have the match yet.
   // `local` is what Dota reported to us during the match, used to find you if your profile is private.
   async function fetchMatch(matchId, local) {
@@ -237,7 +309,7 @@ function createOpenDota({ dir, apiKey, fetchJson = httpJson, spacingMs = 1100 })
     };
   }
 
-  return { fetchMatch, heroLabels };
+  return { fetchMatch, heroLabels, recentMatches, matchups, myHeroes, requestParse, fetchParsed };
 }
 
 module.exports = { createOpenDota, accountIdFromSteamId, RETRY_MINUTES };

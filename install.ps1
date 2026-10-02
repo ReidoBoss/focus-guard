@@ -212,6 +212,7 @@ $Mode = Prev "mode" "bo3"
 $MaxGames = [int](Prev "maxGames" 3)
 $ResetHour = [int](Prev "resetHour" 4)
 $OpenDota = [bool](Prev "opendota" $true)
+$Tilt = [bool](Prev "tiltCheck" $true)
 $dotaDefault = "n"
 if (Prev "dotaEnabled" $true) { $dotaDefault = "y" }
 if (YesNo "Set up the Dota 2 limit?" $dotaDefault) {
@@ -235,6 +236,9 @@ if (YesNo "Set up the Dota 2 limit?" $dotaDefault) {
     $odDefault = "n"
     if ($OpenDota) { $odDefault = "y" }
     $OpenDota = YesNo "Look up the other 9 players on OpenDota after each match?" $odDefault
+    $tiltDefault = "n"
+    if ($Tilt) { $tiltDefault = "y" }
+    $Tilt = YesNo "After a loss, get a tilt check notification (what went wrong, and a nudge to take a break)?" $tiltDefault
 }
 
 if ($Interactive) {
@@ -273,6 +277,7 @@ if ($Interactive) {
     if ($DotaEnabled) {
         if ($Mode -eq "bo3") { Write-Host "  Dota 2 limit:     best of 3, new day at ${ResetHour}:00" } else { Write-Host "  Dota 2 limit:     $MaxGames games, new day at ${ResetHour}:00" }
         if ($OpenDota) { Write-Host "  Player lookups:   on (OpenDota)" } else { Write-Host "  Player lookups:   off" }
+        if ($Tilt) { Write-Host "  Tilt check:       on" } else { Write-Host "  Tilt check:       off" }
     } else {
         Write-Host "  Dota 2 limit:     off"
     }
@@ -292,6 +297,7 @@ $Choices = [ordered]@{
     browsers    = ($Browsers -join ",")
     blockSafari = $false
     opendota    = $OpenDota
+    tiltCheck   = $Tilt
 }
 $ChoicesJson = $Choices | ConvertTo-Json -Compress
 

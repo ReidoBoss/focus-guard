@@ -16,6 +16,7 @@ expect {
   "How many games per day?"       { send "\r"; exp_continue }
   "What hour does a new day start?" { send "banana\r"; expect "whole number"; expect "What hour"; send "5\r"; exp_continue }
   "Look up the other 9 players"   { send "n\r"; exp_continue }
+  "tilt check notification"       { send "y\r"; exp_continue }
   "Block these sites in:"         { expect "Choose 1-3"; send "2\r"; exp_continue }
   "Brave?"                        { send "y\r"; exp_continue }
   "Google Chrome?"                { send "n\r"; exp_continue }

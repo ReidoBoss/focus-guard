@@ -141,7 +141,7 @@ const gsi = (matchid, game_state, win_team) => ({
 
   const config = JSON.parse(fs.readFileSync(path.join(DEST, "dota-limit", "config.json"), "utf8"));
   check(`config matches the installer answers (${config.mode}, ${config.maxGames} games, reset ${config.resetHour})`,
-    config.mode === EXPECT.mode && config.resetHour === EXPECT.resetHour && (config.mode === "bo3" || config.maxGames === EXPECT.maxGames) && config.blockSafari === EXPECT.blockSafari && config.opendota === EXPECT.opendota);
+    config.mode === EXPECT.mode && config.resetHour === EXPECT.resetHour && (config.mode === "bo3" || config.maxGames === EXPECT.maxGames) && config.blockSafari === EXPECT.blockSafari && config.opendota === EXPECT.opendota && config.tiltCheck === true);
 
   checkBrowserPolicies();
 
@@ -179,6 +179,14 @@ const gsi = (matchid, game_state, win_team) => ({
   await waitFor("Steam gets closed while locked", () => steam.exitedAt, 30);
 
   check("closed by the service, with a notice", (await notices()).some((n) => n.msg.includes("locked until tomorrow")));
+
+  const lost = Object.values((await api()).today.matches).find((m) => m.result === "loss");
+  if (lost) check("tilt check saved for the lost game", !!(lost.tilt && lost.tilt.advice));
+  const week = JSON.parse((await request(`${statsUrl}api/weekly`)).body);
+  check(`weekly summary counts this week (${week.wins}-${week.losses}, limit ${week.limitDays} day, ${week.blockedLaunches} reopen attempt)`,
+    week.games === results.length && week.limitDays === 1 && week.blockedLaunches >= 1);
+  const rep = JSON.parse((await request(`${statsUrl}api/report`)).body);
+  check(`hero report endpoint answers (${rep.status})`, ["off", "no-account", "pending", "ready"].includes(rep.status));
 
   if (IS_MAC) {
     const safari = await fakeProcess("/Applications/Safari.app/Contents/MacOS/Safari");

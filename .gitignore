@@ -11,3 +11,6 @@ dota-limit/notifier.vbs
 brave/focus-guard.mobileconfig
 *.focus-guard.bak
 dota-limit/opendota-constants.json
+dota-limit/report.json
+dota-limit/weekly.json
+dota-limit/opendota-matchups.json

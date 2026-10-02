@@ -122,6 +122,54 @@
   .form i { width: 7px; height: 12px; border-radius: 2px; background: var(--line); }
   .form i.win { background: var(--win); } .form i.loss { background: var(--loss); }
   @media (max-width: 600px) { .player { grid-template-columns: 48px 1fr; } .p-hero { width: 48px; height: 27px; } }
+
+  .nav { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 16px; }
+  .nav a { font-size: 13px; color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); }
+  .nav a:hover { color: var(--text); }
+  .h2-sub { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 6px; opacity: .8; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .panel input { width: 100%; font: 500 15px Inter, system-ui, sans-serif; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+  .panel input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tilt { border-top: 1px solid var(--line); padding: 12px 16px; background: rgba(248,113,113,.05); }
+  .tilt b { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--loss); }
+  .tilt ul { margin: 8px 0; padding-left: 18px; }
+  .tilt li { margin: 4px 0; }
+  .tilt li.good { color: var(--win); }
+  .tilt .advice { margin: 6px 0 2px; font-weight: 600; }
+  .lanes { border-top: 1px solid var(--line); padding: 12px 16px; }
+  .lane { display: grid; grid-template-columns: 70px 1fr auto 1fr auto; gap: 8px; align-items: center; padding: 4px 0; font-size: 13px; }
+  .lane .side { display: flex; gap: 3px; } .lane .side.right { justify-content: flex-end; }
+  .lane .side i { width: 36px; height: 20px; border-radius: 3px; background: var(--panel-2) center/cover; }
+  .lane .vs { color: var(--muted); font-size: 12px; }
+  .lane.mine { background: rgba(245,182,66,.06); border-radius: 6px; }
+  .graph { width: 100%; height: 120px; display: block; margin-top: 10px; }
+  .axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+  .counter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .counter-row span.c { display: inline-flex; gap: 4px; align-items: center; }
+  .counter-row span.c.yours { color: var(--win); font-weight: 600; }
+  .counter-row i { width: 36px; height: 20px; border-radius: 3px; background: var(--panel-2) center/cover; }
+  .rep-summary { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .scroll { overflow-x: auto; }
+  table.heroes { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.heroes th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  table.heroes td { padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  table.heroes td.hero-cell { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+  table.heroes td.hero-cell i { width: 44px; height: 25px; border-radius: 4px; background: var(--panel-2) center/cover; }
+  table.heroes .mono { font-family: "JetBrains Mono", monospace; }
+  .bar { display: inline-block; width: 60px; height: 6px; border-radius: 3px; background: var(--line); vertical-align: middle; margin-left: 6px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); }
+  .up { color: var(--win); } .down { color: var(--loss); }
+  .more { margin-top: 10px; font: 600 13px Inter, system-ui, sans-serif; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .week-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .week-head b { font-size: 16px; }
+  .week-head button { font: 600 13px Inter, system-ui, sans-serif; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .week-head button:disabled { opacity: .35; cursor: default; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .card { background: var(--panel-2); border-radius: 10px; padding: 12px; }
+  .card small { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .card b { font-size: 18px; }
+  .card .sub { margin-top: 2px; }
+  @media (max-width: 600px) { .lane { grid-template-columns: 56px 1fr auto 1fr; } .lane .res { grid-column: 1 / -1; } }
 </style>
 </head>
 <body>
@@ -131,7 +179,11 @@
     <div id="status" class="pill">Loading</div>
   </header>
 
-  <section class="series">
+  <nav class="nav">
+    <a href="#today">Today</a><a href="#heroes">Your heroes</a><a href="#counter">Counter-picks</a><a href="#weekly">Weekly</a><a href="#history-h">History</a>
+  </nav>
+
+  <section class="series" id="today">
     <div>
       <div class="score" id="score"></div>
       <div class="verdict" id="verdict"></div>
@@ -142,7 +194,20 @@
   <h2>Today's matches</h2>
   <div id="matches"></div>
 
-  <h2>History</h2>
+  <h2 id="heroes">Your heroes <span class="h2-sub">last 90 days, from OpenDota</span></h2>
+  <div id="report"><div class="empty">Loading your hero report...</div></div>
+
+  <h2 id="counter">Counter-pick lookup <span class="h2-sub">use it during the draft</span></h2>
+  <div class="panel">
+    <input id="counter-input" list="hero-list" autocomplete="off" placeholder="Type an enemy hero, like Pudge" aria-label="Enemy hero">
+    <datalist id="hero-list"></datalist>
+    <div id="counter-result" class="sub">Pick a hero to see what beats it, your record against it, and which of your heroes counter it.</div>
+  </div>
+
+  <h2 id="weekly">Weekly summary</h2>
+  <div id="weekly-box"><div class="empty">Loading...</div></div>
+
+  <h2 id="history-h">History</h2>
   <div id="history"></div>
 </div>
 
@@ -198,6 +263,8 @@ function matchCard(id, m) {
     </div>
     ${stats}
     ${items || links ? `<div class="items">${items}${neutral}${links}</div>` : ""}
+    ${tiltBox(m)}
+    ${laneSection(id, m)}
     ${playersSection(id, m)}
   </div>`;
 }
@@ -301,6 +368,7 @@ function playerRow(p, ctx) {
       <div class="p-items">${items}${p.neutral ? `<i title="${esc(p.neutral)}" style="border-radius:50%;width:22px;background-image:url(${itemImg(p.neutral)})"></i>` : ""}</div>
       <div class="chips">${chips(p, ctx)}</div>
       ${tops}
+      ${ctx.ally ? "" : counterRow(p.hero, ctx.counters)}
     </div>
   </div>`;
 }
@@ -334,7 +402,7 @@ function playersSection(id, m) {
   const enemyTeam = myTeam === "radiant" ? "dire" : "radiant";
   const block = (t, ally) => `
     <div class="team-head"><b class="${ally ? "ally" : "enemy"}">${ally ? "Your team" : "Enemies"} · ${t === "radiant" ? "Radiant" : "Dire"}</b><span>${esc(avgRank(team(t)))}</span></div>
-    ${team(t).map((p) => playerRow(p, { ally, most })).join("")}`;
+    ${team(t).map((p) => playerRow(p, { ally, most, counters: od.counters })).join("")}`;
 
   const open = openPlayers.has(id);
   return `<div class="players-bar">
@@ -342,6 +410,202 @@ function playersSection(id, m) {
       <span>${od.duration ? clock(od.duration) + " · " : ""}${od.radiantScore}-${od.direScore}</span>
     </div>
     ${open ? `<div class="players">${block(myTeam || "radiant", true)}${block(enemyTeam, false)}</div>` : ""}`;
+}
+
+
+// ---------------------------------------------------------------- tilt check, lanes, gold graph
+function tiltBox(m) {
+  if (m.result !== "loss" || !m.tilt) return "";
+  const t = m.tilt;
+  const source = { replay: "the parsed replay", scoreboard: "OpenDota's scoreboard", live: "the live match feed" }[t.detail] || "the match";
+  const points = t.points.length
+    ? `<ul>${t.points.map((p) => `<li class="${p.tone}">${esc(p.text)}</li>`).join("")}</ul>`
+    : `<p>${esc(t.headline)}</p>`;
+  return `<div class="tilt"><b>Tilt check</b>${points}<p class="advice">${esc(t.advice)}</p><span class="sub">Based on ${source}.</span></div>`;
+}
+
+const k = (n) => (Math.abs(n) >= 1000 ? `${Math.round(n / 100) / 10}k` : String(Math.round(n)));
+const signed = (n) => (n > 0 ? "+" : n < 0 ? "-" : "") + k(Math.abs(n));
+
+function goldGraph(id, adv, myTeam) {
+  const sign = myTeam === "dire" ? -1 : 1;
+  const vals = adv.map((v) => v * sign);
+  if (vals.length < 2) return "";
+  const W = 600, H = 120, mid = H / 2;
+  const max = Math.max(1000, ...vals.map((v) => Math.abs(v)));
+  const pts = vals.map((v, i) => `${((i / (vals.length - 1)) * W).toFixed(1)},${(mid - (v / max) * (mid - 6)).toFixed(1)}`);
+  const area = `M0,${mid} L${pts.join(" L")} L${W},${mid} Z`;
+  const cid = `g${String(id).replace(/\D/g, "")}`;
+  const minutes = vals.length - 1;
+  return `<svg class="graph" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Your team's gold lead by minute">
+      <defs>
+        <clipPath id="${cid}u"><rect x="0" y="0" width="${W}" height="${mid}"/></clipPath>
+        <clipPath id="${cid}d"><rect x="0" y="${mid}" width="${W}" height="${mid}"/></clipPath>
+      </defs>
+      <path d="${area}" style="fill:var(--win);fill-opacity:.28" clip-path="url(#${cid}u)"/>
+      <path d="${area}" style="fill:var(--loss);fill-opacity:.28" clip-path="url(#${cid}d)"/>
+      <line x1="0" x2="${W}" y1="${mid}" y2="${mid}" style="stroke:var(--line)" vector-effect="non-scaling-stroke"/>
+      <polyline points="${pts.join(" ")}" style="fill:none;stroke:var(--text);stroke-width:1.5" vector-effect="non-scaling-stroke"/>
+    </svg>
+    <div class="axis"><span>0:00</span><span>Your team's gold lead (green: ahead, red: behind). Peak ${signed(Math.max(...vals))} / ${signed(Math.min(...vals))}</span><span>${minutes}:00</span></div>`;
+}
+
+function laneSection(id, m) {
+  const od = m.opendota;
+  if (!od || od.status !== "ready" || !od.parse) return "";
+  if (od.parse.status === "pending") return `<div class="players-bar">Waiting for OpenDota to parse the replay for lane results and the gold graph.</div>`;
+  if (od.parse.status !== "ready") return `<div class="players-bar">OpenDota couldn't parse this replay, so there are no lane results.</div>`;
+  const myTeam = od.myTeam || (m.details && m.details.team) || "radiant";
+  const icons = (heroes) => heroes.map((h) => `<i title="${esc(pretty(h))}" style="background-image:url(${heroImg(h)})"></i>`).join("");
+  const mine = od.lane && od.lane.lane;
+  const rows = (od.lanes || []).map((l) => {
+    const us = myTeam === "radiant" ? l.radiant : l.dire;
+    const them = myTeam === "radiant" ? l.dire : l.radiant;
+    const diff = (myTeam === "radiant" ? 1 : -1) * l.goldDiff;
+    const res = l.winner === "even" ? `<span class="chip">Even</span>` : (l.winner === myTeam ? `<span class="chip good">Won ${signed(diff)}</span>` : `<span class="chip bad">Lost ${signed(diff)}</span>`);
+    return `<div class="lane ${l.lane === mine ? "mine" : ""}"><span>${l.lane[0].toUpperCase() + l.lane.slice(1)}${l.lane === mine ? " (you)" : ""}</span><span class="side">${icons(us.heroes)}</span><span class="vs">vs</span><span class="side right">${icons(them.heroes)}</span><span class="res">${res}</span></div>`;
+  }).join("");
+  const you = od.lane && od.lane.opponent
+    ? `<p class="sub">You against ${esc(pretty(od.lane.opponent))} at 10:00: ${signed(od.lane.goldDiff)} gold, ${od.lane.lhDiff > 0 ? "+" : ""}${od.lane.lhDiff} last hits.</p>`
+    : "";
+  return `<div class="lanes"><b class="sub">Lanes at 10 minutes (gold)</b>${rows}${you}${od.goldAdv && od.goldAdv.length ? goldGraph(id, od.goldAdv, myTeam) : ""}</div>`;
+}
+
+// ---------------------------------------------------------------- counter-picks
+let REPORT = null;
+
+function myPicksAgainst(list) {
+  if (!REPORT || !list) return [];
+  const mine = {};
+  for (const h of REPORT.heroes) if (h.games >= 3) mine[h.hero] = h;
+  return list.filter((c) => mine[c.hero]).map((c) => Object.assign({}, c, { mine: mine[c.hero] }));
+}
+
+function counterRow(hero, counterMap) {
+  const list = counterMap && counterMap[hero];
+  if (!list || !list.length) return "";
+  const yours = new Set(myPicksAgainst(list).map((c) => c.hero));
+  return `<div class="counter-row">Beaten by:${list.map((c) =>
+    `<span class="c ${yours.has(c.hero) ? "yours" : ""}" title="${esc(pretty(c.hero))} wins ${c.winRate}% of ${c.games} high-level games against it"><i style="background-image:url(${heroImg(c.hero)})"></i>${c.winRate}%${yours.has(c.hero) ? " (you play it)" : ""}</span>`).join("")}</div>`;
+}
+
+let counterAsked = null;
+async function lookupCounter(text) {
+  const wanted = text.trim().toLowerCase();
+  const hero = Object.keys(HERO_LABELS).find((n) => HERO_LABELS[n].toLowerCase() === wanted);
+  const box = document.getElementById("counter-result");
+  if (!hero || hero === counterAsked) return;
+  counterAsked = hero;
+  box.innerHTML = `Looking up ${esc(pretty(hero))}...`;
+  let data;
+  try {
+    data = await (await fetch(`/api/counters/${hero}`, { cache: "no-store" })).json();
+  } catch (e) {
+    box.textContent = "Couldn't reach the service.";
+    return;
+  }
+  if (data.status !== "ready") {
+    box.textContent = data.status === "off" ? "Turn on OpenDota lookups (run the installer again) to use this." : "OpenDota didn't answer. Try again in a minute.";
+    return;
+  }
+  const you = data.you && data.you.againstGames
+    ? `You're ${data.you.againstWin}-${data.you.againstGames - data.you.againstWin} against ${esc(pretty(hero))} (${pct(data.you.againstWin, data.you.againstGames)}%).`
+    : `No games against ${esc(pretty(hero))} on record.`;
+  const picks = myPicksAgainst(data.counters);
+  const yours = picks.length
+    ? `Your best answer: ${picks.map((c) => `<b>${esc(pretty(c.hero))}</b> (${c.mine.games} games, ${pct(c.mine.wins, c.mine.games)}% for you)`).join(", ")}.`
+    : "None of your regular heroes are among its top counters.";
+  box.innerHTML = `<div class="counter-row" style="font-size:13px">Beaten by:${data.counters.map((c) =>
+    `<span class="c ${picks.some((x) => x.hero === c.hero) ? "yours" : ""}"><i style="background-image:url(${heroImg(c.hero)})"></i>${esc(pretty(c.hero))} ${c.winRate}%</span>`).join("")}</div>
+    <p>${you}</p><p>${yours}</p><p class="sub">Win rates are from OpenDota's high-level parsed games (30+ games per pair).</p>`;
+}
+
+// ---------------------------------------------------------------- your heroes
+let showAllHeroes = false;
+const ago = (t) => {
+  const d = Math.floor((Date.now() / 1000 - t) / 86400);
+  return d <= 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`;
+};
+
+function renderReport(data) {
+  const el = document.getElementById("report");
+  if (data.status === "off") return (el.innerHTML = `<div class="empty">Turn on OpenDota lookups (run the installer again) to see your hero report.</div>`);
+  if (data.status === "no-account") return (el.innerHTML = `<div class="empty">Your hero report appears after your first tracked match.</div>`);
+  if (!data.report) return (el.innerHTML = `<div class="empty">Building your hero report from OpenDota...</div>`);
+  const r = data.report;
+  REPORT = r;
+  const chip = (tone, text) => `<span class="chip ${tone}">${esc(text)}</span>`;
+  const summary = [
+    chip("", `${r.games} matches, ${pct(r.wins, r.games)}% wins`),
+    r.best ? chip("good", `Best: ${pretty(r.best)}`) : "",
+    r.worst ? chip("bad", `Worst: ${pretty(r.worst)}`) : "",
+    r.improving ? chip("info", `Improving: ${pretty(r.improving)}`) : "",
+  ].join("");
+  const list = showAllHeroes ? r.heroes : r.heroes.slice(0, 12);
+  const rows = list.map((h) => {
+    const wr = pct(h.wins, h.games);
+    const trend = h.trend === null ? `<span class="sub">-</span>` : h.trend > 0 ? `<span class="up">+${h.trend}%</span>` : h.trend < 0 ? `<span class="down">${h.trend}%</span>` : `<span class="sub">0%</span>`;
+    return `<tr><td class="hero-cell"><i style="background-image:url(${heroImg(h.hero)})"></i>${esc(pretty(h.hero))}</td>
+      <td class="mono">${h.games}</td>
+      <td class="mono">${wr}%<span class="bar"><i style="width:${wr}%"></i></span></td>
+      <td class="mono">${h.kills}/${h.deaths}/${h.assists}</td>
+      <td class="mono">${h.gpm || "-"}</td>
+      <td class="mono">${trend}</td>
+      <td class="sub">${ago(h.lastPlayed)}</td></tr>`;
+  }).join("");
+  el.innerHTML = `<div class="panel"><div class="rep-summary">${summary}</div>
+    <div class="scroll"><table class="heroes"><thead><tr><th>Hero</th><th>Games</th><th>Win rate</th><th>Avg KDA</th><th>GPM</th><th title="Win rate in the last 30 days compared with the 60 before">Trend</th><th>Last played</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${r.heroes.length > 12 ? `<button class="more" data-allheroes="1">${showAllHeroes ? "Show fewer" : `Show all ${r.heroes.length} heroes`}</button>` : ""}
+    <p class="sub">Best and worst need at least 10 games. Trend compares your win rate in the last 30 days with the 60 before.</p></div>`;
+}
+
+// ---------------------------------------------------------------- weekly summary
+let weekShown = null;
+const shortDate = (day) => new Date(day + "T12:00").toLocaleDateString([], { month: "short", day: "numeric" });
+
+function renderWeekly(w) {
+  const el = document.getElementById("weekly-box");
+  weekShown = w.start;
+  const card = (title, value, sub) => `<div class="card"><small>${title}</small><b>${value}</b>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
+  const cards = w.games
+    ? [
+        card("Record", `${w.wins}-${w.losses}`, `${pct(w.wins, w.games)}% wins in ${w.games} games`),
+        card("Days played", `${w.daysPlayed} of 7`),
+        card("Best hero", w.best ? esc(pretty(w.best.hero)) : "-", w.best ? `${w.best.wins}-${w.best.games - w.best.wins}` : ""),
+        card("Worst matchup", w.worst ? esc(pretty(w.worst.hero)) : "-", w.worst ? `lost ${w.worst.losses} of ${w.worst.games} against it` : "needs 2+ losses to one hero"),
+        card("Limit stopped you", `${w.limitDays} day${w.limitDays === 1 ? "" : "s"}`),
+        card("Tried to reopen Steam", `${w.blockedLaunches} time${w.blockedLaunches === 1 ? "" : "s"}`, "after the limit"),
+        w.kda ? card("Average KDA", `${w.kda.kills}/${w.kda.deaths}/${w.kda.assists}`) : "",
+      ].join("")
+    : `<div class="empty" style="grid-column:1/-1">No games this week.</div>`;
+  el.innerHTML = `<div class="panel">
+    <div class="week-head">
+      <button data-week="${w.prev}" ${w.start <= w.firstWeek ? "disabled" : ""}>Previous</button>
+      <b>${shortDate(w.start)} to ${shortDate(w.end)}${w.start === w.thisWeek ? " (this week)" : ""}</b>
+      <button data-week="${w.next}" ${w.start >= w.thisWeek ? "disabled" : ""}>Next</button>
+    </div>
+    <div class="cards">${cards}</div></div>`;
+}
+
+function shiftDay(day, n) {
+  const t = Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10)) + n * 86400000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+async function loadWeekly(start) {
+  try {
+    const w = await (await fetch(`/api/weekly${start ? "?start=" + start : ""}`, { cache: "no-store" })).json();
+    w.prev = shiftDay(w.start, -7);
+    w.next = shiftDay(w.start, 7);
+    renderWeekly(w);
+  } catch (e) {}
+}
+
+async function loadReport() {
+  try {
+    renderReport(await (await fetch("/api/report", { cache: "no-store" })).json());
+    if (last) render(last);
+  } catch (e) {}
 }
 
 function renderMatches(matches) {
@@ -353,6 +617,10 @@ let openDay = null;
 
 function render({ today, history }) {
   HERO_LABELS = today.heroLabels || {};
+  const heroList = document.getElementById("hero-list");
+  if (heroList && !heroList.innerHTML && Object.keys(HERO_LABELS).length) {
+    heroList.innerHTML = Object.values(HERO_LABELS).sort().map((n) => `<option value="${esc(n)}">`).join("");
+  }
   const { list, wins, losses } = tally(today.matches);
   document.getElementById("daylabel").textContent = "· " + new Date(today.day + "T12:00").toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 
@@ -413,6 +681,17 @@ document.addEventListener("click", async (e) => {
     if (last) render(last);
     return;
   }
+  const all = e.target.closest("[data-allheroes]");
+  if (all) {
+    showAllHeroes = !showAllHeroes;
+    if (REPORT) renderReport({ status: "ready", report: REPORT });
+    return;
+  }
+  const week = e.target.closest("[data-week]");
+  if (week) {
+    loadWeekly(week.dataset.week);
+    return;
+  }
   const retry = e.target.closest("[data-lookup]");
   if (retry) {
     retry.disabled = true;
@@ -429,8 +708,19 @@ document.getElementById("history").addEventListener("click", (e) => {
   if (last) render(last);
 });
 
+for (const type of ["input", "change"]) {
+  document.addEventListener(type, (e) => {
+    if (e.target && e.target.id === "counter-input") lookupCounter(e.target.value);
+  });
+}
+
 refresh();
 setInterval(refresh, 5000);
+loadReport();
+setInterval(loadReport, 5 * 60 * 1000);
+loadWeekly();
+// Refreshes whichever week is on screen, so this week's numbers stay current.
+setInterval(() => loadWeekly(weekShown), 60 * 1000);
 </script>
 </body>
 </html>

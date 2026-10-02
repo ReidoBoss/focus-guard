@@ -16,8 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Teammates and enemies (offline)
-        run: node test/opendota.test.js
+      - name: Stats page and insights (offline)
+        run: |
+          node test/insights.test.js
+          node test/opendota.test.js
 
       - name: Create a fake Steam + Dota 2 install
         run: node test/fake-steam.js
@@ -104,8 +106,8 @@ jobs:
         shell: powershell
         run: |
           $env:FG_INTERACTIVE = "1"
-          # Dota: yes, fixed games, 3 (default), bad hour then 5, no OpenDota. Browsers: pick Brave, Edge, Firefox. Confirm.
-          "y`n2`n`nbanana`n5`nn`n2`ny`nn`ny`ny`ny`n" | powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
+          # Dota: yes, fixed games, 3 (default), bad hour then 5, no OpenDota, tilt check on. Browsers: pick Brave, Edge, Firefox. Confirm.
+          "y`n2`n`nbanana`n5`nn`ny`n2`ny`nn`ny`ny`ny`n" | powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: End-to-end test with those answers

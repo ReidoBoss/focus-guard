@@ -6,7 +6,8 @@ const fs = require("fs");
 const path = require("path");
 const { execFile, execFileSync } = require("child_process");
 const { gsiPath, gsiConfig } = require("./gsi");
-const { createOpenDota, RETRY_MINUTES } = require("./opendota");
+const { createOpenDota, accountIdFromSteamId, RETRY_MINUTES } = require("./opendota");
+const insights = require("./insights");
 
 const DIR = __dirname;
 const CONFIG = JSON.parse(fs.readFileSync(path.join(DIR, "config.json"), "utf8"));
@@ -26,6 +27,9 @@ const IS_WIN = process.platform === "win32";
 const IS_MAC = process.platform === "darwin";
 const DOTA_ENABLED = CONFIG.dotaEnabled !== false;
 const BLOCK_SAFARI = IS_MAC && CONFIG.blockSafari === true;
+const TILT_CHECK = CONFIG.tiltCheck !== false;
+const PARSE_REPLAYS = CONFIG.parseReplays !== false;
+const WEEKLY_SUMMARY = CONFIG.weeklySummary !== false;
 
 const LIVE_STATES = new Set([
   "DOTA_GAMERULES_STATE_STRATEGY_TIME",
@@ -192,12 +196,16 @@ function onGameState(body) {
     save();
     const t = tally();
     log(`match ${matchid} ${state.matches[matchid].result} (${t.wins}W ${t.losses}L)`);
+    if (state.matches[matchid].result === "loss") state.matches[matchid].tilt = buildTilt(state.matches[matchid]);
     if (limitReached()) {
       postGameSince = Date.now();
       notify("Dota Limit", `Done for today (${t.wins}W ${t.losses}L). Steam closes in ${CONFIG.postGameGraceSeconds}s.`);
+    } else if (TILT_CHECK && state.matches[matchid].tilt) {
+      notify("Tilt check", `${t.wins}W ${t.losses}L today. ${state.matches[matchid].tilt.headline} ${state.matches[matchid].tilt.advice}`);
     } else {
       notify("Dota Limit", `${t.played} played today (${t.wins}W ${t.losses}L).`);
     }
+    save();
   }
 }
 
@@ -288,6 +296,7 @@ function ensureGsiConfig() {
 let dotaSeenAt = null;
 let lastLockNotice = 0;
 let lastSafariNotice = 0;
+let lastBlockedCount = 0;
 
 function tick() {
   rollover();
@@ -307,6 +316,7 @@ function tick() {
 
   if (!DOTA_ENABLED) return;
   ensureGsiConfig();
+  maybeWeeklyNotice();
 
   const dota = procs.filter((p) => isDota(p.cmd));
   const steam = procs.filter((p) => isSteam(p.cmd));
@@ -332,6 +342,12 @@ function tick() {
   if (state.lockedAt) {
     if (steam.length || dota.length) {
       kill([...dota, ...steam]);
+      // For the weekly summary. One attempt can show up over several ticks, so count once a minute.
+      if (Date.now() - lastBlockedCount > 60 * 1000) {
+        state.blockedLaunches = (state.blockedLaunches || 0) + 1;
+        lastBlockedCount = Date.now();
+        save();
+      }
       if (Date.now() - lastLockNotice > 10 * 60 * 1000) {
         notify("Dota Limit", "Steam is locked until tomorrow. Go get better at life.");
         lastLockNotice = Date.now();
@@ -384,7 +400,9 @@ async function lookup(id) {
   let result = null;
   let error = null;
   try {
-    result = await opendota.fetchMatch(id, before.match.details);
+    const local = Object.assign({}, before.match.details);
+    if (!local.accountid && !local.steamid && CONFIG.accountId) local.accountid = CONFIG.accountId;
+    result = await opendota.fetchMatch(id, local);
     if (!result) error = "OpenDota doesn't have this match yet";
   } catch (e) {
     error = e.message;
@@ -396,6 +414,7 @@ async function lookup(id) {
     found.match.opendota = Object.assign({ status: "ready" }, result);
     found.commit();
     log(`OpenDota details saved for match ${id}`);
+    afterLookup(id).catch((e) => log(`after-match extras for ${id} failed: ${e.message}`));
     return;
   }
   const od = found.match.opendota || { tries: 0 };
@@ -422,11 +441,164 @@ function resumeLookups() {
   for (const day of days) {
     for (const [id, m] of Object.entries(day.matches)) {
       const od = m.opendota;
-      if (od && od.status === "pending" && new Date(m.endedAt || m.startedAt).getTime() > week) {
-        scheduleLookup(id, (15 + 10 * n++) * 1000);
-      }
+      if (!od || new Date(m.endedAt || m.startedAt).getTime() < week) continue;
+      if (od.status === "pending") scheduleLookup(id, (15 + 10 * n++) * 1000);
+      else if (od.status === "ready" && od.parse && od.parse.status === "pending") scheduleParse(id, (15 + 10 * n++) * 1000);
     }
   }
+}
+
+// ---------------------------------------------------------------- insights
+const REPORT_FILE = path.join(DIR, "report.json");
+const WEEKLY_FILE = path.join(DIR, "weekly.json");
+// Minutes after the scoreboard arrives to check whether the replay is parsed.
+const PARSE_MINUTES = [0.5, 2, 5, 10, 20, 40, 90];
+const parseTimers = new Map();
+let report = null;
+try {
+  report = JSON.parse(fs.readFileSync(REPORT_FILE, "utf8"));
+} catch (e) {}
+let reportBusy = false;
+
+const label = (n) => (opendota && opendota.heroLabels()[n]) || (n ? n.replace("npc_dota_hero_", "").replace(/_/g, " ") : "unknown hero");
+
+function myAccountId() {
+  if (CONFIG.accountId) return Number(CONFIG.accountId);
+  for (const day of [state].concat(loadHistory())) {
+    for (const m of Object.values(day.matches)) {
+      const d = m.details || {};
+      const id = Number(d.accountid) || accountIdFromSteamId(d.steamid);
+      if (id) return id;
+    }
+  }
+  return null;
+}
+
+function buildTilt(match) {
+  return insights.tiltCheck({ details: match.details, opendota: match.opendota, report, label });
+}
+
+async function refreshReport(force) {
+  const id = myAccountId();
+  if (!opendota || !id || reportBusy) return;
+  if (!force && report && report.accountId === id && Date.now() - report.at < 3600 * 1000) return;
+  reportBusy = true;
+  try {
+    const rows = await opendota.recentMatches(id);
+    report = Object.assign({ at: Date.now(), accountId: id }, insights.heroReport(rows));
+    fs.writeFileSync(REPORT_FILE, JSON.stringify(report));
+    log(`hero report updated (${report.games} matches)`);
+  } catch (e) {
+    log(`hero report failed: ${e.message}`);
+  } finally {
+    reportBusy = false;
+  }
+}
+
+// Counter-picks for the enemy heroes, a fresh hero report, the tilt check, then replay parsing.
+async function afterLookup(id) {
+  const first = findMatch(id);
+  if (!first) return;
+  const od = first.match.opendota;
+  const me = od.players.find((p) => p.isMe);
+  const myTeam = (me && me.team) || (first.match.details || {}).team;
+  const counterMap = {};
+  for (const p of od.players) {
+    if (p.team === myTeam || !p.hero) continue;
+    try {
+      counterMap[p.hero] = insights.counters(await opendota.matchups(p.hero));
+    } catch (e) {}
+  }
+  await refreshReport(true);
+  const found = findMatch(id);
+  if (!found) return;
+  found.match.opendota.counters = counterMap;
+  if (found.match.result === "loss") found.match.tilt = buildTilt(found.match);
+  if (PARSE_REPLAYS) {
+    found.match.opendota.parse = { status: "pending", tries: 0 };
+    scheduleParse(id, PARSE_MINUTES[0] * 60 * 1000);
+  }
+  found.commit();
+}
+
+function scheduleParse(id, delayMs) {
+  if (!opendota || parseTimers.has(id)) return;
+  parseTimers.set(id, setTimeout(() => {
+    parseTimers.delete(id);
+    parseStep(id).catch((e) => log(`replay parse for ${id} failed: ${e.message}`));
+  }, delayMs));
+}
+
+async function parseStep(id) {
+  const before = findMatch(id);
+  if (!before || !before.match.opendota || !before.match.opendota.parse) return;
+  const job = before.match.opendota.parse;
+  let parsed = null;
+  let error = null;
+  try {
+    // Ask once, and again later in case the replay wasn't downloadable the first time.
+    if (!job.requested || job.tries === 3) await opendota.requestParse(id);
+    parsed = await opendota.fetchParsed(id);
+  } catch (e) {
+    error = e.message;
+  }
+  const found = findMatch(id);
+  if (!found) return;
+  const od = found.match.opendota;
+  if (parsed) {
+    const me = od.players.find((p) => p.isMe);
+    const myTeam = (me && me.team) || (found.match.details || {}).team;
+    od.parse = { status: "ready" };
+    od.lanes = insights.laneResults(parsed);
+    od.lane = me ? insights.yourLane(parsed, me.slot) : null;
+    od.swing = insights.goldSwing(parsed.goldAdv, myTeam);
+    od.goldAdv = parsed.goldAdv;
+    od.myTeam = myTeam;
+    if (found.match.result === "loss") {
+      found.match.tilt = buildTilt(found.match);
+      // A second tilt notice only when the replay found something new and you're not mid-match.
+      const fromReplay = (od.lane && od.lane.goldDiff <= -1000) || (od.swing && od.swing.lead.gold >= 5000);
+      if (TILT_CHECK && fromReplay && !currentMatch && !state.lockedAt && state.matches[id]) {
+        notify("Tilt check", `The replay is in. ${found.match.tilt.headline}`);
+      }
+    }
+    found.commit();
+    log(`replay parsed for match ${id}`);
+    return;
+  }
+  const pj = od.parse || job;
+  pj.requested = true;
+  pj.tries = (pj.tries || 0) + 1;
+  pj.error = error || "replay not parsed yet";
+  if (pj.tries >= PARSE_MINUTES.length) {
+    pj.status = "unavailable";
+  } else {
+    pj.status = "pending";
+    scheduleParse(id, (PARSE_MINUTES[pj.tries] - PARSE_MINUTES[pj.tries - 1]) * 60 * 1000);
+  }
+  od.parse = pj;
+  found.commit();
+}
+
+let weeklyState = {};
+try {
+  weeklyState = JSON.parse(fs.readFileSync(WEEKLY_FILE, "utf8"));
+} catch (e) {}
+
+// Once a week (the first time the computer is on after the week ends), sum up the last one.
+function maybeWeeklyNotice() {
+  if (!WEEKLY_SUMMARY) return;
+  const lastWeek = insights.addDays(insights.weekStartOf(state.day), -7);
+  if (weeklyState.week === lastWeek) return;
+  weeklyState = { week: lastWeek };
+  try {
+    fs.writeFileSync(WEEKLY_FILE, JSON.stringify(weeklyState));
+  } catch (e) {}
+  const w = insights.weekly([state].concat(loadHistory()), lastWeek);
+  if (!w.games) return;
+  const best = w.best ? ` Best hero: ${label(w.best.hero)}.` : "";
+  const stopped = w.limitDays ? ` The limit stopped you on ${w.limitDays} day${w.limitDays === 1 ? "" : "s"}.` : "";
+  notify("Weekly summary", `Last week: ${w.wins}-${w.losses}.${best}${stopped} Details at ${statsUrl}#weekly`);
 }
 
 function status() {
@@ -465,6 +637,33 @@ const statsServer = http.createServer((req, res) => {
     if (url === "/api") {
       res.setHeader("content-type", "application/json");
       return res.end(JSON.stringify({ today: status(), history: loadHistory() }));
+    }
+    const json = (body) => {
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify(body));
+    };
+    if (url === "/api/report") {
+      refreshReport(false);
+      return json({ status: !opendota ? "off" : !myAccountId() ? "no-account" : report ? "ready" : "pending", report });
+    }
+    if (url === "/api/weekly") {
+      const days = [state].concat(loadHistory());
+      const asked = new URL(req.url, "http://x").searchParams.get("start");
+      const start = /^\d{4}-\d{2}-\d{2}$/.test(asked || "") ? insights.weekStartOf(asked) : insights.weekStartOf(state.day);
+      const earliest = days.map((d) => d.day).sort()[0] || state.day;
+      return json(Object.assign(insights.weekly(days, start), { thisWeek: insights.weekStartOf(state.day), firstWeek: insights.weekStartOf(earliest) }));
+    }
+    const counterAsk = url.match(/^\/api\/counters\/(npc_dota_hero_[a-z_]+)$/);
+    if (counterAsk) {
+      const hero = counterAsk[1];
+      if (!opendota) return json({ hero, status: "off" });
+      (async () => {
+        const list = insights.counters(await opendota.matchups(hero));
+        const id = myAccountId();
+        const mine = id ? await opendota.myHeroes(id) : {};
+        json({ hero, status: "ready", counters: list, you: mine[hero] || null, yourPicks: insights.yourCounters(list, report) });
+      })().catch((e) => json({ hero, status: "error", error: e.message }));
+      return;
     }
     if (req.headers.host && !req.headers.host.startsWith(STATS_HOST)) {
       res.writeHead(302, { location: statsUrl });
@@ -522,5 +721,6 @@ http
 
 if (DOTA_ENABLED) ensureGsiConfig();
 if (DOTA_ENABLED) resumeLookups();
+if (DOTA_ENABLED && opendota) setTimeout(() => refreshReport(false), 20 * 1000);
 setInterval(tick, 5000);
 tick();

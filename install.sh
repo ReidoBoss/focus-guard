@@ -249,6 +249,7 @@ MODE="$(prev mode bo3)"
 MAX_GAMES="$(prev maxGames 3)"
 RESET_HOUR="$(prev resetHour 4)"
 OPENDOTA="$(prev opendota true)"
+TILT="$(prev tiltCheck true)"
 tell ""
 tell "$(bold "1. Dota 2 daily limit")"
 tell "Counts your matches and closes Steam for the rest of the day once you're done."
@@ -272,6 +273,11 @@ if yesno "Set up the Dota 2 limit?" "$( [ "$(prev dotaEnabled true)" = true ] &&
     OPENDOTA=true
   else
     OPENDOTA=false
+  fi
+  if yesno "After a loss, get a tilt check notification (what went wrong, and a nudge to take a break)?" "$( [ "$TILT" = true ] && echo y || echo n )"; then
+    TILT=true
+  else
+    TILT=false
   fi
 fi
 
@@ -331,6 +337,7 @@ tell "$(bold "Summary")"
 if [ "$DOTA_ENABLED" = true ]; then
   if [ "$MODE" = bo3 ]; then tell "  Dota 2 limit:     best of 3, new day at $RESET_HOUR:00"; else tell "  Dota 2 limit:     $MAX_GAMES games, new day at $RESET_HOUR:00"; fi
   tell "  Player lookups:   $( [ "$OPENDOTA" = true ] && echo "on (OpenDota)" || echo "off" )"
+  tell "  Tilt check:       $( [ "$TILT" = true ] && echo "on" || echo "off" )"
 else
   tell "  Dota 2 limit:     off"
 fi
@@ -342,8 +349,8 @@ if [ "$INTERACTIVE" = 1 ] && ! yesno "Install with these settings?" y; then
   exit 0
 fi
 
-CHOICES="$("$NODE" -e 'const [d,m,g,h,b,s,o]=process.argv.slice(1);console.log(JSON.stringify({dotaEnabled:d==="true",mode:m,maxGames:Number(g),resetHour:Number(h),browsers:b,blockSafari:s==="true",opendota:o==="true"}))' \
-  "$DOTA_ENABLED" "$MODE" "$MAX_GAMES" "$RESET_HOUR" "$BROWSERS" "$BLOCK_SAFARI" "$OPENDOTA")"
+CHOICES="$("$NODE" -e 'const [d,m,g,h,b,s,o,t]=process.argv.slice(1);console.log(JSON.stringify({dotaEnabled:d==="true",mode:m,maxGames:Number(g),resetHour:Number(h),browsers:b,blockSafari:s==="true",opendota:o==="true",tiltCheck:t==="true"}))' \
+  "$DOTA_ENABLED" "$MODE" "$MAX_GAMES" "$RESET_HOUR" "$BROWSERS" "$BLOCK_SAFARI" "$OPENDOTA" "$TILT")"
 
 # ---------------------------------------------------------------- files
 say "Installing to $DEST"
