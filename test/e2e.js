@@ -18,6 +18,8 @@ const EXPECT = {
   browsers: (process.env.FG_EXPECT_BROWSERS || (IS_WIN ? "brave,chrome,edge,firefox" : IS_MAC ? "brave,chrome,edge,firefox" : "brave,chrome,chromium,edge,firefox")).split(",").filter(Boolean),
   mode: process.env.FG_EXPECT_MODE || "bo3",
   maxGames: Number(process.env.FG_EXPECT_MAX || 3),
+  weekendMode: process.env.FG_EXPECT_WEEKEND_MODE || "same",
+  weekendMaxGames: Number(process.env.FG_EXPECT_WEEKEND_MAX || 7),
   resetHour: Number(process.env.FG_EXPECT_RESET || 4),
   blockSafari: process.env.FG_EXPECT_SAFARI === "1",
   opendota: process.env.FG_EXPECT_OPENDOTA !== "0",
@@ -141,7 +143,7 @@ const gsi = (matchid, game_state, win_team) => ({
 
   const config = JSON.parse(fs.readFileSync(path.join(DEST, "dota-limit", "config.json"), "utf8"));
   check(`config matches the installer answers (${config.mode}, ${config.maxGames} games, reset ${config.resetHour})`,
-    config.mode === EXPECT.mode && config.resetHour === EXPECT.resetHour && (config.mode === "bo3" || config.maxGames === EXPECT.maxGames) && config.blockSafari === EXPECT.blockSafari && config.opendota === EXPECT.opendota && config.tiltCheck === true);
+    config.mode === EXPECT.mode && config.weekendMode === EXPECT.weekendMode && (config.weekendMode !== "games" || config.weekendMaxGames === EXPECT.weekendMaxGames) && config.resetHour === EXPECT.resetHour && (config.mode === "bo3" || config.maxGames === EXPECT.maxGames) && config.blockSafari === EXPECT.blockSafari && config.opendota === EXPECT.opendota && config.tiltCheck === true);
 
   checkBrowserPolicies();
 
@@ -154,7 +156,13 @@ const gsi = (matchid, game_state, win_team) => ({
 
   // Best of 3: a 2-0 ends the day. Fixed games: play them all, losing one, and check it
   // doesn't lock one game early.
-  const results = EXPECT.mode === "bo3" ? ["radiant", "radiant"] : Array.from({ length: EXPECT.maxGames }, (_, i) => (i === 1 ? "dire" : "radiant"));
+  // On Saturday and Sunday the weekend limit applies, so ask the service which one is in force.
+  const limit = (await api()).today;
+  const weekendRule = limit.weekend && EXPECT.weekendMode !== "same";
+  const want = weekendRule ? { mode: EXPECT.weekendMode, maxGames: EXPECT.weekendMaxGames } : EXPECT;
+  check(`today's limit is the ${weekendRule ? "weekend" : "everyday"} one (${limit.mode}, ${limit.maxGames} games)`,
+    limit.mode === want.mode && (want.mode === "bo3" || limit.maxGames === want.maxGames));
+  const results = want.mode === "bo3" ? ["radiant", "radiant"] : Array.from({ length: want.maxGames }, (_, i) => (i === 1 ? "dire" : "radiant"));
   for (let i = 0; i < results.length; i++) {
     // IDs far above real ones, so the OpenDota lookup finds nothing.
     const id = String(990000000001 + i);

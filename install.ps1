@@ -210,6 +210,8 @@ if ($Interactive) {
 $DotaEnabled = $false
 $Mode = Prev "mode" "bo3"
 $MaxGames = [int](Prev "maxGames" 3)
+$WeekendMode = Prev "weekendMode" "same"
+$WeekendMax = [int](Prev "weekendMaxGames" 7)
 $ResetHour = [int](Prev "resetHour" 4)
 $OpenDota = [bool](Prev "opendota" $true)
 $Tilt = [bool](Prev "tiltCheck" $true)
@@ -225,6 +227,21 @@ if (YesNo "Set up the Dota 2 limit?" $dotaDefault) {
         $MaxGames = Number "How many games per day?" $MaxGames 1 20
     } else {
         $Mode = "bo3"
+    }
+    $weekendDefault = "y"
+    if ($WeekendMode -eq "same") { $weekendDefault = "n" }
+    if (YesNo "Use a different limit on Saturday and Sunday?" $weekendDefault) {
+        $weekendPick = 2
+        if ($WeekendMode -eq "bo3") { $weekendPick = 1 }
+        $pick = Choose "On Saturday and Sunday, when should the day end?" $weekendPick @("Best of 3: stop at 2 wins or 2 losses", "After a fixed number of games")
+        if ($pick -eq 2) {
+            $WeekendMode = "games"
+            $WeekendMax = Number "How many games on Saturday and Sunday?" $WeekendMax 1 20
+        } else {
+            $WeekendMode = "bo3"
+        }
+    } else {
+        $WeekendMode = "same"
     }
     $ResetHour = Number "What hour does a new day start? (0-23, so a 2 AM game counts toward the night before)" $ResetHour 0 23
     if ($Interactive) {
@@ -276,6 +293,7 @@ if ($Interactive) {
     Bold "Summary"
     if ($DotaEnabled) {
         if ($Mode -eq "bo3") { Write-Host "  Dota 2 limit:     best of 3, new day at ${ResetHour}:00" } else { Write-Host "  Dota 2 limit:     $MaxGames games, new day at ${ResetHour}:00" }
+        if ($WeekendMode -eq "bo3") { Write-Host "  Weekends:         best of 3" } elseif ($WeekendMode -eq "games") { Write-Host "  Weekends:         $WeekendMax games" } else { Write-Host "  Weekends:         same as weekdays" }
         if ($OpenDota) { Write-Host "  Player lookups:   on (OpenDota)" } else { Write-Host "  Player lookups:   off" }
         if ($Tilt) { Write-Host "  Tilt check:       on" } else { Write-Host "  Tilt check:       off" }
     } else {
@@ -293,6 +311,8 @@ $Choices = [ordered]@{
     dotaEnabled = $DotaEnabled
     mode        = $Mode
     maxGames    = $MaxGames
+    weekendMode = $WeekendMode
+    weekendMaxGames = $WeekendMax
     resetHour   = $ResetHour
     browsers    = ($Browsers -join ",")
     blockSafari = $false

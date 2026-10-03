@@ -130,10 +130,27 @@ function tally() {
   };
 }
 
+// Saturday and Sunday can have their own limit (weekendMode "bo3" or "games").
+// The day is the one dayKey() gives, so a Friday game at 2 AM Saturday is still Friday.
+function isWeekend(day) {
+  const [y, m, d] = day.split("-").map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return dow === 0 || dow === 6;
+}
+
+function todaysLimit() {
+  const weekend = isWeekend(state.day);
+  if (weekend && (CONFIG.weekendMode === "bo3" || CONFIG.weekendMode === "games")) {
+    return { mode: CONFIG.weekendMode, maxGames: CONFIG.weekendMaxGames || CONFIG.maxGames, weekend };
+  }
+  return { mode: CONFIG.mode, maxGames: CONFIG.maxGames, weekend };
+}
+
 function limitReached() {
   const t = tally();
-  if (CONFIG.mode === "bo3") return t.wins >= 2 || t.losses >= 2 || t.played >= 3;
-  return t.played >= CONFIG.maxGames;
+  const limit = todaysLimit();
+  if (limit.mode === "bo3") return t.wins >= 2 || t.losses >= 2 || t.played >= 3;
+  return t.played >= limit.maxGames;
 }
 
 function snapshot({ map = {}, player = {}, hero = {}, items = {} }) {
@@ -602,12 +619,15 @@ function maybeWeeklyNotice() {
 }
 
 function status() {
+  const limit = todaysLimit();
   return {
     ...state,
     ...tally(),
     limitReached: limitReached(),
-    mode: CONFIG.mode,
-    maxGames: CONFIG.maxGames,
+    mode: limit.mode,
+    maxGames: limit.maxGames,
+    weekend: limit.weekend,
+    weekendLimit: CONFIG.weekendMode === "bo3" || CONFIG.weekendMode === "games",
     resetHour: CONFIG.resetHour,
     dotaEnabled: DOTA_ENABLED,
     currentMatch,

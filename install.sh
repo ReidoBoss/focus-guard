@@ -247,6 +247,8 @@ tell "Press Enter to take the answer in [brackets]."
 DOTA_ENABLED=false
 MODE="$(prev mode bo3)"
 MAX_GAMES="$(prev maxGames 3)"
+WEEKEND_MODE="$(prev weekendMode same)"
+WEEKEND_MAX="$(prev weekendMaxGames 7)"
 RESET_HOUR="$(prev resetHour 4)"
 OPENDOTA="$(prev opendota true)"
 TILT="$(prev tiltCheck true)"
@@ -263,6 +265,19 @@ if yesno "Set up the Dota 2 limit?" "$( [ "$(prev dotaEnabled true)" = true ] &&
     MAX_GAMES="$(number "How many games per day?" "$MAX_GAMES" 1 20)"
   else
     MODE=bo3
+  fi
+  if yesno "Use a different limit on Saturday and Sunday?" "$( [ "$WEEKEND_MODE" = same ] && echo n || echo y )"; then
+    pick="$(choose "On Saturday and Sunday, when should the day end?" "$( [ "$WEEKEND_MODE" = bo3 ] && echo 1 || echo 2 )" \
+      "Best of 3: stop at 2 wins or 2 losses" \
+      "After a fixed number of games")"
+    if [ "$pick" = 2 ]; then
+      WEEKEND_MODE=games
+      WEEKEND_MAX="$(number "How many games on Saturday and Sunday?" "$WEEKEND_MAX" 1 20)"
+    else
+      WEEKEND_MODE=bo3
+    fi
+  else
+    WEEKEND_MODE=same
   fi
   RESET_HOUR="$(number "What hour does a new day start? (0-23, so a 2 AM game counts toward the night before)" "$RESET_HOUR" 0 23)"
   tell ""
@@ -336,6 +351,11 @@ tell ""
 tell "$(bold "Summary")"
 if [ "$DOTA_ENABLED" = true ]; then
   if [ "$MODE" = bo3 ]; then tell "  Dota 2 limit:     best of 3, new day at $RESET_HOUR:00"; else tell "  Dota 2 limit:     $MAX_GAMES games, new day at $RESET_HOUR:00"; fi
+  case "$WEEKEND_MODE" in
+    bo3) tell "  Weekends:         best of 3" ;;
+    games) tell "  Weekends:         $WEEKEND_MAX games" ;;
+    *) tell "  Weekends:         same as weekdays" ;;
+  esac
   tell "  Player lookups:   $( [ "$OPENDOTA" = true ] && echo "on (OpenDota)" || echo "off" )"
   tell "  Tilt check:       $( [ "$TILT" = true ] && echo "on" || echo "off" )"
 else
@@ -349,8 +369,8 @@ if [ "$INTERACTIVE" = 1 ] && ! yesno "Install with these settings?" y; then
   exit 0
 fi
 
-CHOICES="$("$NODE" -e 'const [d,m,g,h,b,s,o,t]=process.argv.slice(1);console.log(JSON.stringify({dotaEnabled:d==="true",mode:m,maxGames:Number(g),resetHour:Number(h),browsers:b,blockSafari:s==="true",opendota:o==="true",tiltCheck:t==="true"}))' \
-  "$DOTA_ENABLED" "$MODE" "$MAX_GAMES" "$RESET_HOUR" "$BROWSERS" "$BLOCK_SAFARI" "$OPENDOTA" "$TILT")"
+CHOICES="$("$NODE" -e 'const [d,m,g,wm,wg,h,b,s,o,t]=process.argv.slice(1);console.log(JSON.stringify({dotaEnabled:d==="true",mode:m,maxGames:Number(g),weekendMode:wm,weekendMaxGames:Number(wg),resetHour:Number(h),browsers:b,blockSafari:s==="true",opendota:o==="true",tiltCheck:t==="true"}))' \
+  "$DOTA_ENABLED" "$MODE" "$MAX_GAMES" "$WEEKEND_MODE" "$WEEKEND_MAX" "$RESET_HOUR" "$BROWSERS" "$BLOCK_SAFARI" "$OPENDOTA" "$TILT")"
 
 # ---------------------------------------------------------------- files
 say "Installing to $DEST"

@@ -106,8 +106,8 @@ jobs:
         shell: powershell
         run: |
           $env:FG_INTERACTIVE = "1"
-          # Dota: yes, fixed games, 3 (default), bad hour then 5, no OpenDota, tilt check on. Browsers: pick Brave, Edge, Firefox. Confirm.
-          "y`n2`n`nbanana`n5`nn`ny`n2`ny`nn`ny`ny`ny`n" | powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
+          # Dota: yes, fixed games, 3 (default), weekends 7 games (default), bad hour then 5, no OpenDota, tilt check on. Browsers: pick Brave, Edge, Firefox. Confirm.
+          "y`n2`n`ny`n2`n`nbanana`n5`nn`ny`n2`ny`nn`ny`ny`ny`n" | powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: End-to-end test with those answers
@@ -115,6 +115,8 @@ jobs:
           FG_EXPECT_BROWSERS: brave,edge,firefox
           FG_EXPECT_MODE: games
           FG_EXPECT_MAX: "3"
+          FG_EXPECT_WEEKEND_MODE: games
+          FG_EXPECT_WEEKEND_MAX: "7"
           FG_EXPECT_RESET: "5"
           FG_EXPECT_SAFARI: ${{ runner.os == 'macOS' && '1' || '0' }}
           FG_EXPECT_OPENDOTA: "0"

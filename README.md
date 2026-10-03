@@ -4,7 +4,7 @@
 
 Two self-control tools for people who want to get better at life:
 
-- **Dota Limit**: one best-of-3 Dota 2 series per day. When the series is decided (2-0, 0-2, or after game 3), Steam is closed and stays closed until 4 AM. Comes with a stats page at **http://dota-limiter-stats**.
+- **Dota Limit**: one best-of-3 Dota 2 series per day. When the series is decided (2-0, 0-2, or after game 3), Steam is closed and stays closed until 4 AM. Saturday and Sunday can have their own limit, like 7 games. Comes with a stats page at **http://dota-limiter-stats**.
 - **Website blocker**: blocks Facebook, YouTube and Reddit, except **facebook.com/messages**, in Brave, Chrome, Edge, Firefox and Chromium. On macOS it can also stop Safari from opening.
 
 Works on **macOS**, **Ubuntu / Debian** and **Windows 10 / 11**.
@@ -37,6 +37,7 @@ Set up the Dota 2 limit? (y/n) [y]:
 When should the day end?
   1) Best of 3: stop at 2 wins or 2 losses
   2) After a fixed number of games
+Use a different limit on Saturday and Sunday? (y/n) [n]:
 What hour does a new day start? (0-23, so a 2 AM game counts toward the night before) [4]:
 
 2. Website blocker
@@ -179,6 +180,8 @@ The easy way is to run the installer again and give different answers. You can a
 |---|---|---|
 | `mode` | `"bo3"` | `"bo3"`: stop at 2 wins or 2 losses. `"games"`: stop after `maxGames` games. |
 | `maxGames` | `3` | Games per day when `mode` is `"games"`. |
+| `weekendMode` | `"same"` | Saturday and Sunday limit: `"same"` as weekdays, `"bo3"`, or `"games"`. |
+| `weekendMaxGames` | `7` | Games per day on Saturday and Sunday when `weekendMode` is `"games"`. |
 | `resetHour` | `4` | Hour (0 to 23) when a new day starts. A 2 AM game counts toward the day before. |
 | `postGameGraceSeconds` | `90` | Time on the result screen before Steam closes. |
 | `dotaEnabled` | `true` | `false` turns the Dota limit off. |

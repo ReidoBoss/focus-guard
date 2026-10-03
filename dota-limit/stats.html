@@ -639,6 +639,7 @@ function render({ today, history }) {
   else if (today.limitReached) verdict = "Done for today.";
   else if (bo3 && wins === 1 && losses === 1) verdict = "1-1. Next game decides it.";
   else verdict = bo3 ? "Best of 3. First to 2 wins." : `${Math.max(0, (today.maxGames || 3) - list.length)} games left today.`;
+  if (today.weekend && today.weekendLimit && !today.limitReached) verdict = `Weekend limit. ${verdict}`;
   document.getElementById("verdict").textContent = verdict;
 
   const ordered = list.sort((a, b) => a.startedAt.localeCompare(b.startedAt));

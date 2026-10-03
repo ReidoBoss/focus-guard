@@ -21,6 +21,8 @@ const DOTA_APP_ID = "570";
 const DEFAULTS = {
   mode: "bo3",
   maxGames: 3,
+  weekendMode: "same",
+  weekendMaxGames: 7,
   resetHour: 4,
   postGameGraceSeconds: 90,
   port: 43210,
@@ -34,7 +36,7 @@ const DEFAULTS = {
 };
 
 // Installer answers that map straight onto config.json.
-const CHOICE_KEYS = ["dotaEnabled", "mode", "maxGames", "resetHour", "blockSafari", "opendota", "tiltCheck"];
+const CHOICE_KEYS = ["dotaEnabled", "mode", "maxGames", "weekendMode", "weekendMaxGames", "resetHour", "blockSafari", "opendota", "tiltCheck"];
 
 function windowsSteamPath() {
   try {

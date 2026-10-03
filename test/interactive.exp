@@ -1,5 +1,5 @@
 # CI only: answers the installer's questions like a person would.
-#   expect test/interactive.exp install     fixed 3 games, new day at 5, no OpenDota, Brave + Edge + Firefox, block Safari
+#   expect test/interactive.exp install     fixed 3 games, 7 on weekends, new day at 5, no OpenDota, Brave + Edge + Firefox, block Safari
 #   expect test/interactive.exp uninstall   confirms the uninstall
 set timeout 120
 set action [lindex $argv 0]
@@ -14,6 +14,9 @@ expect {
   "Set up the Dota 2 limit?"      { send "y\r"; exp_continue }
   "When should the day end?"      { expect "Choose 1-2"; send "2\r"; exp_continue }
   "How many games per day?"       { send "\r"; exp_continue }
+  "different limit on Saturday"   { send "y\r"; exp_continue }
+  "On Saturday and Sunday, when"  { expect "Choose 1-2"; send "2\r"; exp_continue }
+  "How many games on Saturday"    { send "\r"; exp_continue }
   "What hour does a new day start?" { send "banana\r"; expect "whole number"; expect "What hour"; send "5\r"; exp_continue }
   "Look up the other 9 players"   { send "n\r"; exp_continue }
   "tilt check notification"       { send "y\r"; exp_continue }
