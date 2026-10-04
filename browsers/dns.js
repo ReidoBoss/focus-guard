@@ -19,11 +19,18 @@ const RESOLVED_FILE = "/etc/systemd/resolved.conf.d/focus-guard.conf";
 // "~." sends every lookup to these servers instead of the ones the network hands out.
 const RESOLVED_CONF = `# Focus Guard: block adult websites (Cloudflare for Families)\n[Resolve]\nDNS=${SERVERS.join(" ")}\nDomains=~.\n`;
 
-const run = (cmd, args, env) =>
-  execFileSync(cmd, args, { windowsHide: true, env: Object.assign({}, process.env, env || {}), maxBuffer: 4 * 1024 * 1024 }).toString();
+function run(cmd, args, env) {
+  try {
+    return execFileSync(cmd, args, { windowsHide: true, env: Object.assign({}, process.env, env || {}), maxBuffer: 4 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }).toString();
+  } catch (e) {
+    // The command's own message, not the whole PowerShell script.
+    throw new Error(String(e.stderr || "").trim() || `${cmd} failed`);
+  }
+}
 const ps = (script, env) => run("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], env);
 // Filtered means only our servers, and at least the IPv4 ones (a connection without IPv6 can't take the rest).
-const same = (list) => list.indexOf(SERVERS[0]) !== -1 && list.every((s) => SERVERS.indexOf(s) !== -1);
+// fec0:0:0:ffff::1-3 are placeholders Windows lists when IPv6 has no DNS server; they never answer.
+const same = (list) => list.indexOf(SERVERS[0]) !== -1 && list.every((s) => SERVERS.indexOf(s) !== -1 || /^fec0:0:0:ffff::[123]$/i.test(s));
 
 function readBackup() {
   try {
@@ -45,7 +52,7 @@ function macConnections() {
     .map((name) => {
       const out = run("networksetup", ["-getdnsservers", name]);
       const servers = /aren't any/i.test(out) ? [] : out.split("\n").map((s) => s.trim()).filter(Boolean);
-      return { id: name, name, servers };
+      return { id: name, name, servers, saved: servers };
     });
 }
 
@@ -58,7 +65,8 @@ function macSet(list) {
 }
 
 // ---------------------------------------------------------------- Windows
-// "servers" are only the ones typed in by hand (from the registry); none means automatic.
+// "servers" are the ones in use, from the network or typed in. "saved" are only the ones
+// typed in by hand (from the registry), since none means automatic.
 // An adapter with IPv6 turned off gets the IPv4 servers only.
 function winConnections() {
   const out = ps(`
@@ -67,17 +75,22 @@ foreach ($a in Get-NetAdapter) {
   $g = $a.InterfaceGuid
   $v4 = (Get-ItemProperty "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\$g" -Name NameServer -ErrorAction SilentlyContinue).NameServer
   $v6 = (Get-ItemProperty "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters\\Interfaces\\$g" -Name NameServer -ErrorAction SilentlyContinue).NameServer
-  $r += [pscustomobject]@{ id = "$g"; index = $a.ifIndex; name = $a.Name; servers = "$v4 $v6" }
+  $now = @(Get-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ErrorAction SilentlyContinue | ForEach-Object { $_.ServerAddresses })
+  $r += [pscustomobject]@{ id = "$g"; index = $a.ifIndex; name = $a.Name; servers = ($now -join " "); saved = "$v4 $v6" }
 }
 ConvertTo-Json -InputObject @($r) -Compress`).trim();
-  return JSON.parse(out || "[]").map((c) => ({ id: c.id, index: c.index, name: c.name, servers: c.servers.split(/[\s,]+/).filter(Boolean) }));
+  const split = (v) => String(v || "").split(/[\s,]+/).filter(Boolean);
+  return JSON.parse(out || "[]").map((c) => ({ id: c.id, index: c.index, name: c.name, servers: split(c.servers), saved: split(c.saved) }));
 }
 
+// Throws with the reason if any adapter refused the change.
 function winSet(list) {
   // Passed through the environment: PowerShell 5 mangles quotes in native arguments.
   ps(
     `
-foreach ($c in ($env:FG_DNS_SET | ConvertFrom-Json)) {
+$failed = 0
+$list = $env:FG_DNS_SET | ConvertFrom-Json
+foreach ($c in $list) {
   try {
     if (@($c.servers).Count) {
       try { Set-DnsClientServerAddress -InterfaceIndex $c.index -ServerAddresses @($c.servers) -ErrorAction Stop }
@@ -85,10 +98,13 @@ foreach ($c in ($env:FG_DNS_SET | ConvertFrom-Json)) {
     } else {
       Set-DnsClientServerAddress -InterfaceIndex $c.index -ResetServerAddresses -ErrorAction Stop
     }
-  } catch { Write-Host "$($c.index): $_" }
+  } catch {
+    [Console]::Error.WriteLine("adapter $($c.index): $_")
+    $failed++
+  }
 }
 Clear-DnsClientCache
-exit 0`,
+exit $failed`,
     { FG_DNS_SET: JSON.stringify(list.map((c) => ({ index: c.index, servers: c.servers }))) }
   );
 }
@@ -133,7 +149,7 @@ function on() {
   const todo = connections().filter((c) => !same(c.servers));
   if (!todo.length) return [];
   // Only the first time a connection is seen, so a second "on" never saves the filter as the "before".
-  for (const c of todo) if (!backup[c.id]) backup[c.id] = { name: c.name, servers: c.servers };
+  for (const c of todo) if (!backup[c.id]) backup[c.id] = { name: c.name, servers: c.saved };
   fs.writeFileSync(BACKUP, JSON.stringify(backup, null, 2) + "\n");
   set(todo.map((c) => Object.assign({}, c, { servers: SERVERS })));
   return todo.map((c) => c.name);
@@ -159,7 +175,7 @@ function off() {
 }
 
 function status() {
-  return connections().map((c) => ({ name: c.name, filtered: same(c.servers) }));
+  return connections().map((c) => ({ name: c.name, filtered: same(c.servers), servers: c.servers }));
 }
 
 module.exports = { on, off, status, SERVERS };

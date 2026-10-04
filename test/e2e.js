@@ -146,7 +146,7 @@ function checkBrowserPolicies() {
 
 async function checkAdultDns() {
   const status = JSON.parse(execFileSync(process.execPath, [path.join(DEST, "browsers", "dns.js"), "status"]).toString());
-  check(`DNS filter ${EXPECT.adult ? "on" : "off"} (${status.map((c) => `${c.name}: ${c.filtered ? "on" : "off"}`).join(", ")})`,
+  check(`DNS filter ${EXPECT.adult ? "on" : "off"} (${status.map((c) => `${c.name}: ${c.filtered ? "on" : `off [${c.servers.join(" ")}]`}`).join(", ")})`,
     status.length > 0 && status.every((c) => c.filtered === EXPECT.adult));
   if (!EXPECT.adult) return;
   // Cloudflare for Families answers 0.0.0.0 for adult sites.
