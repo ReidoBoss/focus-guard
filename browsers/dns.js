@@ -75,7 +75,10 @@ foreach ($a in Get-NetAdapter) {
   $g = $a.InterfaceGuid
   $v4 = (Get-ItemProperty "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\$g" -Name NameServer -ErrorAction SilentlyContinue).NameServer
   $v6 = (Get-ItemProperty "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters\\Interfaces\\$g" -Name NameServer -ErrorAction SilentlyContinue).NameServer
-  $now = @(Get-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ErrorAction SilentlyContinue | ForEach-Object { $_.ServerAddresses })
+  # An adapter with no IP settings (unplugged, or a spare NIC) can't look anything up, and can't take DNS servers.
+  $dns = @(Get-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ErrorAction SilentlyContinue)
+  if (-not $dns.Count) { continue }
+  $now = @($dns | ForEach-Object { $_.ServerAddresses })
   $r += [pscustomobject]@{ id = "$g"; index = $a.ifIndex; name = $a.Name; servers = ($now -join " "); saved = "$v4 $v6" }
 }
 ConvertTo-Json -InputObject @($r) -Compress`).trim();
