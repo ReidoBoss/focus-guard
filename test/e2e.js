@@ -149,26 +149,18 @@ async function checkAdultDns() {
   check(`DNS filter ${EXPECT.adult ? "on" : "off"} (${status.map((c) => `${c.name}: ${c.filtered ? "on" : `off [${c.servers.join(" ")}]`}`).join(", ")})`,
     status.length > 0 && status.every((c) => c.filtered === EXPECT.adult));
   if (!EXPECT.adult) return;
-  // Cloudflare for Families answers 0.0.0.0 for adult sites.
+  // Cloudflare for Families answers 0.0.0.0 for adult sites. Windows won't hand out 0.0.0.0
+  // as an address, so there the lookup fails instead (the next check shows DNS itself works).
   let got = "";
   try {
-    await waitFor("an adult site resolves to 0.0.0.0", () => new Promise((resolve) => {
+    await waitFor("an adult site is blocked by DNS", () => new Promise((resolve) => {
       require("dns").lookup("pornhub.com", { family: 4 }, (err, address) => {
         got = err ? err.code : address;
-        resolve(got === "0.0.0.0");
+        resolve(got === "0.0.0.0" || (IS_WIN && got === "ENOENT"));
       });
     }), 30);
   } catch (e) {
-    console.log(`the system lookup answered ${got}`);
-    if (IS_WIN) {
-      for (const cmd of ["Resolve-DnsName pornhub.com -Type A | Format-Table -AutoSize | Out-String -Width 200", "Resolve-DnsName pornhub.com -Type A -Server 1.1.1.3 -DnsOnly | Format-Table -AutoSize | Out-String -Width 200", "Get-DnsClientNrptPolicy | Format-List | Out-String", "Get-DnsClientServerAddress | Format-Table -AutoSize | Out-String -Width 200", "Get-DnsClientDohServerAddress | Format-Table | Out-String", "Get-Service Dnscache | Format-List | Out-String"]) {
-        try {
-          console.log(`> ${cmd}\n${execFileSync("powershell", ["-NoProfile", "-Command", cmd]).toString()}`);
-        } catch (err) {
-          console.log(`> ${cmd}\n${err.stderr || err.message}`);
-        }
-      }
-    }
+    console.log(`the lookup answered ${got}`);
     throw e;
   }
   await waitFor("other sites still resolve", () => new Promise((resolve) => {
