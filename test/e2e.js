@@ -23,6 +23,7 @@ const EXPECT = {
   resetHour: Number(process.env.FG_EXPECT_RESET || 4),
   blockSafari: process.env.FG_EXPECT_SAFARI === "1",
   opendota: process.env.FG_EXPECT_OPENDOTA !== "0",
+  adult: process.env.FG_EXPECT_ADULT === "1",
 };
 const ALL_BROWSERS = IS_WIN || IS_MAC ? ["brave", "chrome", "edge", "firefox"] : ["brave", "chrome", "chromium", "edge", "firefox"];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -86,10 +87,29 @@ function check(what, cond) {
   console.log(`ok: ${what}`);
 }
 
+// The part of the macOS profile for one browser.
+function macPayload(b) {
+  const file = path.join(DEST, "browsers", "focus-guard.mobileconfig");
+  const type = { brave: "com.brave.Browser", chrome: "com.google.Chrome", edge: "com.microsoft.Edge", firefox: "org.mozilla.firefox" }[b];
+  if (!fs.existsSync(file)) return "";
+  const chunks = fs.readFileSync(file, "utf8").split("<key>PayloadType</key>");
+  return chunks.find((c) => c.startsWith(`<string>${type}</string>`)) || "";
+}
+
+function regHas(key, value) {
+  try {
+    execFileSync("reg", value ? ["query", key, "/v", value] : ["query", key], { stdio: "ignore" });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function checkBrowserPolicies() {
   for (const b of ALL_BROWSERS) {
     const want = EXPECT.browsers.includes(b);
     let has;
+    let adult;
     if (IS_WIN) {
       const key = {
         brave: "HKLM\\SOFTWARE\\Policies\\BraveSoftware\\Brave\\URLBlocklist",
@@ -102,20 +122,40 @@ function checkBrowserPolicies() {
       } catch (e) {
         has = false;
       }
+      adult = b === "firefox" ? regHas("HKLM\\SOFTWARE\\Policies\\Mozilla\\Firefox\\DNSOverHTTPS") : regHas(key.replace(/\\URLBlocklist$/, ""), "DnsOverHttpsMode");
     } else if (IS_MAC) {
-      const file = path.join(DEST, "browsers", "focus-guard.mobileconfig");
-      const type = { brave: "com.brave.Browser", chrome: "com.google.Chrome", edge: "com.microsoft.Edge", firefox: "org.mozilla.firefox" }[b];
-      has = fs.existsSync(file) && fs.readFileSync(file, "utf8").includes(`<string>${type}</string>`);
+      const payload = macPayload(b);
+      has = payload.includes(b === "firefox" ? "<key>WebsiteFilter</key>" : "<key>URLBlocklist</key>");
+      adult = payload.includes(b === "firefox" ? "<key>DNSOverHTTPS</key>" : "<key>DnsOverHttpsMode</key>");
     } else if (b === "firefox") {
       const file = "/etc/firefox/policies/policies.json";
-      has = fs.existsSync(file) && !!(JSON.parse(fs.readFileSync(file, "utf8")).policies || {}).WebsiteFilter;
+      const policies = (fs.existsSync(file) && JSON.parse(fs.readFileSync(file, "utf8")).policies) || {};
+      has = !!policies.WebsiteFilter;
+      adult = !!policies.DNSOverHTTPS;
     } else {
       const dir = { brave: "/etc/brave/policies/managed", chrome: "/etc/opt/chrome/policies/managed", chromium: "/etc/chromium/policies/managed", edge: "/etc/opt/edge/policies/managed" }[b];
       const file = path.join(dir, "focus-guard.json");
-      has = fs.existsSync(file) && JSON.parse(fs.readFileSync(file, "utf8")).URLBlocklist.includes("facebook.com");
+      const policy = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+      has = (policy.URLBlocklist || []).includes("facebook.com");
+      adult = policy.DnsOverHttpsMode === "off";
     }
     check(`${b} policy ${want ? "applied" : "not applied"}`, has === want);
+    check(`${b} adult settings ${EXPECT.adult ? "applied" : "not applied"}`, adult === EXPECT.adult);
   }
+}
+
+async function checkAdultDns() {
+  const status = JSON.parse(execFileSync(process.execPath, [path.join(DEST, "browsers", "dns.js"), "status"]).toString());
+  check(`DNS filter ${EXPECT.adult ? "on" : "off"} (${status.map((c) => `${c.name}: ${c.filtered ? "on" : "off"}`).join(", ")})`,
+    status.length > 0 && status.every((c) => c.filtered === EXPECT.adult));
+  if (!EXPECT.adult) return;
+  // Cloudflare for Families answers 0.0.0.0 for adult sites.
+  await waitFor("an adult site resolves to 0.0.0.0", () => new Promise((resolve) => {
+    require("dns").lookup("pornhub.com", { family: 4 }, (err, address) => resolve(!err && address === "0.0.0.0"));
+  }), 30);
+  await waitFor("other sites still resolve", () => new Promise((resolve) => {
+    require("dns").lookup("github.com", { family: 4 }, (err, address) => resolve(!err && address !== "0.0.0.0"));
+  }), 30);
 }
 
 const gsi = (matchid, game_state, win_team) => ({
@@ -143,9 +183,10 @@ const gsi = (matchid, game_state, win_team) => ({
 
   const config = JSON.parse(fs.readFileSync(path.join(DEST, "dota-limit", "config.json"), "utf8"));
   check(`config matches the installer answers (${config.mode}, ${config.maxGames} games, reset ${config.resetHour})`,
-    config.mode === EXPECT.mode && config.weekendMode === EXPECT.weekendMode && (config.weekendMode !== "games" || config.weekendMaxGames === EXPECT.weekendMaxGames) && config.resetHour === EXPECT.resetHour && (config.mode === "bo3" || config.maxGames === EXPECT.maxGames) && config.blockSafari === EXPECT.blockSafari && config.opendota === EXPECT.opendota && config.tiltCheck === true);
+    config.mode === EXPECT.mode && config.weekendMode === EXPECT.weekendMode && (config.weekendMode !== "games" || config.weekendMaxGames === EXPECT.weekendMaxGames) && config.resetHour === EXPECT.resetHour && (config.mode === "bo3" || config.maxGames === EXPECT.maxGames) && config.blockSafari === EXPECT.blockSafari && config.blockAdult === EXPECT.adult && config.opendota === EXPECT.opendota && config.tiltCheck === true);
 
   checkBrowserPolicies();
+  await checkAdultDns();
 
   const dotaExe = IS_WIN
     ? path.join(os.tmpdir(), "fg-dota", "dota2.exe")

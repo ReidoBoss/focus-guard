@@ -29,6 +29,7 @@ const DEFAULTS = {
   requireReports: false,
   dotaEnabled: true,
   blockSafari: false,
+  blockAdult: false,
   opendota: true,
   tiltCheck: true,
   parseReplays: true,
@@ -36,7 +37,7 @@ const DEFAULTS = {
 };
 
 // Installer answers that map straight onto config.json.
-const CHOICE_KEYS = ["dotaEnabled", "mode", "maxGames", "weekendMode", "weekendMaxGames", "resetHour", "blockSafari", "opendota", "tiltCheck"];
+const CHOICE_KEYS = ["dotaEnabled", "mode", "maxGames", "weekendMode", "weekendMaxGames", "resetHour", "blockSafari", "blockAdult", "opendota", "tiltCheck"];
 
 function windowsSteamPath() {
   try {

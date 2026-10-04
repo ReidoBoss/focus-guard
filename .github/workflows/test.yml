@@ -106,8 +106,8 @@ jobs:
         shell: powershell
         run: |
           $env:FG_INTERACTIVE = "1"
-          # Dota: yes, fixed games, 3 (default), weekends 7 games (default), bad hour then 5, no OpenDota, tilt check on. Browsers: pick Brave, Edge, Firefox. Confirm.
-          "y`n2`n`ny`n2`n`nbanana`n5`nn`ny`n2`ny`nn`ny`ny`ny`n" | powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
+          # Dota: yes, fixed games, 3 (default), weekends 7 games (default), bad hour then 5, no OpenDota, tilt check on. Browsers: pick Brave, Edge, Firefox. Block adult sites. Confirm.
+          "y`n2`n`ny`n2`n`nbanana`n5`nn`ny`n2`ny`nn`ny`ny`ny`ny`n" | powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: End-to-end test with those answers
@@ -120,6 +120,7 @@ jobs:
           FG_EXPECT_RESET: "5"
           FG_EXPECT_SAFARI: ${{ runner.os == 'macOS' && '1' || '0' }}
           FG_EXPECT_OPENDOTA: "0"
+          FG_EXPECT_ADULT: "1"
         run: node test/e2e.js
 
       - name: Uninstall, confirming the question (macOS / Linux)
@@ -127,6 +128,8 @@ jobs:
         run: |
           expect test/interactive.exp uninstall
           if [ -d /opt/focus-guard ] || [ -d /usr/local/focus-guard ]; then echo "still installed"; exit 1; fi
+          if node browsers/dns.js status | grep -q '"filtered":true'; then echo "DNS filter left behind"; exit 1; fi
+          node -e 'require("dns").lookup("github.com", (e) => process.exit(e ? 1 : 0))' || { echo "DNS broken after uninstall"; exit 1; }
 
       - name: Uninstall, confirming the question (Windows)
         if: runner.os == 'Windows'
@@ -136,6 +139,9 @@ jobs:
           "y`n" | powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 -Uninstall
           if (Test-Path "$env:ProgramFiles\FocusGuard") { throw "still installed" }
           if (Test-Path "HKLM:\SOFTWARE\Policies\Google\Chrome\URLBlocklist") { throw "policy left behind" }
+          if ((Get-ItemProperty "HKLM:\SOFTWARE\Policies\Google\Chrome" -ErrorAction SilentlyContinue).DnsOverHttpsMode) { throw "adult policy left behind" }
+          if ((node browsers/dns.js status) -match '"filtered":true') { throw "DNS filter left behind" }
+          try { Resolve-DnsName github.com -DnsOnly -ErrorAction Stop | Out-Null } catch { throw "DNS broken after uninstall" }
 
       - name: Service logs
         if: failure()

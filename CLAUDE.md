@@ -4,6 +4,7 @@ Self-control tools installed with one command on macOS, Ubuntu and Windows:
 
 - **Dota Limit** (`dota-limit/`): counts Dota 2 matches through Game State Integration (GSI) and closes Steam for the rest of the day once the day's series is decided. Serves a stats page at `http://dota-limiter-stats`.
 - **Website blocker** (`browsers/`): blocks the sites in `browsers/sites.json` through browser policies, plus a Chromium extension for Facebook's single-page navigation. Can block Safari outright on macOS.
+- **Adult website block** (`browsers/dns.js`, optional, `blockAdult`): sets the system DNS to Cloudflare for Families and adds SafeSearch and "secure DNS off" policies to every browser.
 
 `README.md` is the user-facing doc. This file is for working on the code.
 
@@ -22,7 +23,8 @@ Self-control tools installed with one command on macOS, Ubuntu and Windows:
 | `dota-limit/insights.js` | Hero report, tilt check, lane results, gold swing, counter-picks and weekly summary. Pure functions with no network or file access; the daemon feeds them data. |
 | `dota-limit/opendota.js` | After a match, fetches the scoreboard and each public player's profile from OpenDota. Requests go out one at a time, about 1.1 s apart, because the free tier allows 60 a minute. |
 | `browsers/sites.json` | Blocked and allowed sites. The only list; every browser format is generated from it. |
-| `browsers/policies.js` | Generates Chromium policy JSON, Firefox `WebsiteFilter`, and the macOS `.mobileconfig`. |
+| `browsers/policies.js` | Generates Chromium policy JSON, Firefox policies, and the macOS `.mobileconfig`. Takes a site-list flag and an adult flag per browser. |
+| `browsers/dns.js` | Turns the family DNS filter on or off. Run by the installers, and every minute by the daemon (as a child process) while `blockAdult` is on. |
 | `browsers/extension/` | MV3 extension for Brave, Chrome, Edge and Chromium. |
 | `test/` | `insights.test.js` and `opendota.test.js` (offline, safe to run anywhere) plus the CI-only `fake-steam.js`, `e2e.js` and `interactive.exp`. |
 
@@ -54,6 +56,7 @@ Install locations: `/usr/local/focus-guard` (macOS), `/opt/focus-guard` (Linux),
   - **Request budget:** a full first lookup takes about 40 to 50 requests at 1.1 s each, so 1 to 3 minutes. Hero constants and matchups are cached on disk for a week, the report for an hour, and profiles for 6 hours.
 - **Port 80 can be taken.** GitHub's Windows runners reserve it, so the stats page falls back to 8787. The daemon writes the URL it actually used to `stats-url.txt`; read that instead of hard-coding the address.
 - **macOS profile identifiers** include a hash of their content (`local.focusguard.browsers.<hash>`), so a changed profile is a new identifier. The installer removes older Focus Guard profiles only after the new one is installed.
+- **Adult block DNS.** macOS (`networksetup`, per network service) and Windows (`Set-DnsClientServerAddress`, per adapter) save each connection's previous servers in `<install>/dns-backup.json`, only the first time it's seen, and `off` restores them. Linux writes a `systemd-resolved` drop-in with `Domains=~.`, so link DNS from DHCP isn't used. Turn it off before the install folder is deleted, and after the service stops, or the daemon turns it straight back on. Its browser policies go to every browser, not just the ones picked for the site list, so `install.ps1` clears every name in `$OurPolicies` before writing.
 - **Firefox** can't get the extension (release Firefox only runs Mozilla-signed add-ons). **Safari** has no URL policy, so it can only be blocked outright (`blockSafari`).
 
 ## Adding a browser
@@ -61,7 +64,7 @@ Install locations: `/usr/local/focus-guard` (macOS), `/opt/focus-guard` (Linux),
 Every one of these must be updated:
 
 - `install.sh`: `BROWSERS_ALL`, `browser_name`, `browser_installed`, and `linux_policy_dirs`
-- `install.ps1`: `$AllBrowsers`, `$BrowserNames`, `$PolicyKeys`, `$BrowserExes`
+- `install.ps1`: `$AllBrowsers`, `$BrowserNames`, `$PolicyKeys`, `$BrowserExes` (and `$OurPolicies` for any new policy name)
 - `browsers/policies.js`: `PAYLOAD_TYPES` (macOS)
 - `test/e2e.js`: `ALL_BROWSERS` and `checkBrowserPolicies()`
 - `README.md`: the browser support table
@@ -82,9 +85,10 @@ Safe local checks:
 ```bash
 node test/insights.test.js   # hero report, tilt check, lanes, counters, weekly summary
 node test/opendota.test.js   # OpenDota lookups and the whole stats page, against canned answers
+node browsers/dns.js status  # read-only; "on" and "off" change this machine's DNS
 for f in dota-limit/*.js browsers/*.js browsers/extension/*.js test/*.js; do node --check "$f" || echo "FAIL $f"; done
 bash -n install.sh
-node browsers/policies.js mobileconfig brave,chrome,edge,firefox | plutil -lint -   # macOS
+node browsers/policies.js mobileconfig brave,chrome,edge,firefox 1 | plutil -lint -   # macOS
 ```
 
 To try the installer's questions without installing anything, copy `install.sh`, remove the root check, point `DEST` at a scratch folder, end the script before the `files` section, and drive it with `expect`.

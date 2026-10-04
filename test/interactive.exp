@@ -1,5 +1,5 @@
 # CI only: answers the installer's questions like a person would.
-#   expect test/interactive.exp install     fixed 3 games, 7 on weekends, new day at 5, no OpenDota, Brave + Edge + Firefox, block Safari
+#   expect test/interactive.exp install     fixed 3 games, 7 on weekends, new day at 5, no OpenDota, Brave + Edge + Firefox, block Safari, block adult sites
 #   expect test/interactive.exp uninstall   confirms the uninstall
 set timeout 120
 set action [lindex $argv 0]
@@ -27,6 +27,7 @@ expect {
   "Microsoft Edge?"               { send "y\r"; exp_continue }
   "Firefox?"                      { send "y\r"; exp_continue }
   "What should happen to Safari?" { expect "Choose 1-2"; send "2\r"; exp_continue }
+  "Block adult websites?"         { send "y\r"; exp_continue }
   "Install with these settings?"  { send "y\r"; exp_continue }
   eof
 }

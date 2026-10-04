@@ -27,6 +27,7 @@ const IS_WIN = process.platform === "win32";
 const IS_MAC = process.platform === "darwin";
 const DOTA_ENABLED = CONFIG.dotaEnabled !== false;
 const BLOCK_SAFARI = IS_MAC && CONFIG.blockSafari === true;
+const BLOCK_ADULT = CONFIG.blockAdult === true;
 const TILT_CHECK = CONFIG.tiltCheck !== false;
 const PARSE_REPLAYS = CONFIG.parseReplays !== false;
 const WEEKLY_SUMMARY = CONFIG.weeklySummary !== false;
@@ -744,3 +745,26 @@ if (DOTA_ENABLED) resumeLookups();
 if (DOTA_ENABLED && opendota) setTimeout(() => refreshReport(false), 20 * 1000);
 setInterval(tick, 5000);
 tick();
+
+// Adult website block: puts the family DNS filter back on a new network connection or
+// after a hand-made change. A separate process, since PowerShell is slow to start.
+if (BLOCK_ADULT) {
+  const dnsScript = path.join(DIR, "..", "browsers", "dns.js");
+  let lastDnsError = "";
+  setInterval(() => {
+    execFile(process.execPath, [dnsScript, "on"], { windowsHide: true, timeout: 60 * 1000 }, (err, out, errOut) => {
+      if (err) {
+        const msg = (errOut || err.message).trim();
+        if (msg !== lastDnsError) log(`DNS filter check failed: ${msg}`);
+        lastDnsError = msg;
+        return;
+      }
+      lastDnsError = "";
+      let changed = [];
+      try {
+        changed = JSON.parse(out);
+      } catch (e) {}
+      if (changed.length) log(`DNS filter turned back on for: ${changed.join(", ")}`);
+    });
+  }, 60 * 1000);
+}

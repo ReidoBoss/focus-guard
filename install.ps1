@@ -23,8 +23,10 @@ $PolicyKeys = @{
     brave   = "HKLM:\SOFTWARE\Policies\BraveSoftware\Brave"
     chrome  = "HKLM:\SOFTWARE\Policies\Google\Chrome"
     edge    = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
-    firefox = "HKLM:\SOFTWARE\Policies\Mozilla\Firefox\WebsiteFilter"
+    firefox = "HKLM:\SOFTWARE\Policies\Mozilla\Firefox"
 }
+# Every policy browsers\policies.js can write, so a reinstall or uninstall clears them all.
+$OurPolicies = @("URLBlocklist", "URLAllowlist", "DnsOverHttpsMode", "ForceGoogleSafeSearch", "ForceYouTubeRestrict", "ForceBingSafeSearch", "WebsiteFilter", "DNSOverHTTPS")
 $BrowserExes = @{
     brave   = @("$env:ProgramFiles\BraveSoftware\Brave-Browser\Application\brave.exe", "${env:ProgramFiles(x86)}\BraveSoftware\Brave-Browser\Application\brave.exe", "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\Application\brave.exe")
     chrome  = @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe", "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe")
@@ -125,12 +127,38 @@ function Set-UrlList($key, $values) {
     }
 }
 
-function Remove-BrowserPolicy($b) {
-    if ($b -eq "firefox") {
-        Remove-Item $PolicyKeys[$b] -Recurse -Force -ErrorAction SilentlyContinue
-    } else {
-        Remove-Item "$($PolicyKeys[$b])\URLBlocklist", "$($PolicyKeys[$b])\URLAllowlist" -Recurse -Force -ErrorAction SilentlyContinue
+# Writes policies.js output: lists and nested objects become subkeys, the rest values.
+function Set-Policy($key, $policy) {
+    if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
+    foreach ($p in $policy.PSObject.Properties) {
+        $v = $p.Value
+        if ($v -is [array]) {
+            Set-UrlList "$key\$($p.Name)" $v
+        } elseif ($v.GetType().Name -eq "PSCustomObject") {
+            Set-Policy "$key\$($p.Name)" $v
+        } elseif ($v -is [bool] -or $v -is [int]) {
+            New-ItemProperty -Path $key -Name $p.Name -Value ([int]$v) -PropertyType DWord -Force | Out-Null
+        } else {
+            New-ItemProperty -Path $key -Name $p.Name -Value "$v" -PropertyType String -Force | Out-Null
+        }
     }
+}
+
+function Remove-BrowserPolicy($b) {
+    $key = $PolicyKeys[$b]
+    foreach ($name in $OurPolicies) {
+        Remove-Item "$key\$name" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path $key -Name $name -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Find-Node {
+    $cmd = Get-Command node -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    foreach ($p in @("$env:ProgramFiles\nodejs\node.exe", "${env:ProgramFiles(x86)}\nodejs\node.exe")) {
+        if (Test-Path $p) { return $p }
+    }
+    return $null
 }
 
 # ---------------------------------------------------------------- uninstall
@@ -145,6 +173,12 @@ if ($Uninstall) {
         Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
     }
     foreach ($b in $AllBrowsers) { Remove-BrowserPolicy $b }
+    $n = Find-Node
+    $dnsScript = Join-Path $Dest "browsers\dns.js"
+    if ($n -and (Test-Path $dnsScript)) {
+        & $n $dnsScript off | Out-Null
+        if ($LASTEXITCODE -ne 0) { Warn "Couldn't put your DNS settings back. Set them to automatic in your network settings." }
+    }
     Remove-HostsEntry
     Remove-Item $Dest -Recurse -Force -ErrorAction SilentlyContinue
     Say "Done. Remove the Focus Guard extension from your browsers' extension pages yourself."
@@ -170,14 +204,6 @@ if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "dota-limit\daemon.js
 }
 
 # ---------------------------------------------------------------- node.js
-function Find-Node {
-    $cmd = Get-Command node -ErrorAction SilentlyContinue
-    if ($cmd) { return $cmd.Source }
-    foreach ($p in @("$env:ProgramFiles\nodejs\node.exe", "${env:ProgramFiles(x86)}\nodejs\node.exe")) {
-        if (Test-Path $p) { return $p }
-    }
-    return $null
-}
 $Node = Find-Node
 if (-not $Node) {
     Say "Installing Node.js (needed to run Focus Guard)"
@@ -288,6 +314,19 @@ if ($pick -eq 2) {
 $names = ($Browsers | ForEach-Object { $BrowserNames[$_] }) -join ", "
 if (-not $names) { $names = "off" }
 
+$PrevAdult = [bool](Prev "blockAdult" $false)
+if ($Interactive) {
+    Write-Host ""
+    Bold "3. Adult websites"
+    Write-Host "Blocks porn and other adult sites in every browser and app, by switching this computer's"
+    Write-Host "DNS to Cloudflare's free family filter. Also turns on SafeSearch in Google, Bing and YouTube."
+}
+$adultDefault = "n"
+if ($PrevAdult) { $adultDefault = "y" }
+$BlockAdult = YesNo "Block adult websites?" $adultDefault
+$Adult01 = "0"
+if ($BlockAdult) { $Adult01 = "1" }
+
 if ($Interactive) {
     Write-Host ""
     Bold "Summary"
@@ -300,6 +339,7 @@ if ($Interactive) {
         Write-Host "  Dota 2 limit:     off"
     }
     Write-Host "  Website blocker:  $names"
+    if ($BlockAdult) { Write-Host "  Adult websites:   blocked" } else { Write-Host "  Adult websites:   not blocked" }
     Write-Host ""
     if (-not (YesNo "Install with these settings?" "y")) {
         Write-Host "Nothing changed."
@@ -316,6 +356,7 @@ $Choices = [ordered]@{
     resetHour   = $ResetHour
     browsers    = ($Browsers -join ",")
     blockSafari = $false
+    blockAdult  = $BlockAdult
     opendota    = $OpenDota
     tiltCheck   = $Tilt
 }
@@ -365,6 +406,19 @@ $env:FG_DETECTED = "$Detected"
 $env:FG_CHOICES = $ChoicesJson
 & $Node (Join-Path $Dest "dota-limit\setup.js") write-config (Join-Path $Dest "dota-limit\config.json") $env:USERNAME | Out-Null
 
+# ---------------------------------------------------------------- adult websites
+# Before the service starts, since the service re-applies the filter when it's on.
+$dnsScript = Join-Path $Dest "browsers\dns.js"
+if ($BlockAdult) {
+    Say "Blocking adult websites"
+    & $Node $dnsScript on | Out-Null
+    if ($LASTEXITCODE -ne 0) { Warn "Couldn't change this computer's DNS settings, so adult sites are only hidden from Google, Bing and YouTube searches." }
+} elseif ($PrevAdult) {
+    Say "Unblocking adult websites"
+    & $Node $dnsScript off | Out-Null
+    if ($LASTEXITCODE -ne 0) { Warn "Couldn't put your DNS settings back. Set them to automatic in your network settings." }
+}
+
 # ---------------------------------------------------------------- service
 Say "Starting the background service"
 $daemon = Join-Path $Dest "dota-limit\daemon.js"
@@ -399,18 +453,18 @@ ipconfig /flushdns | Out-Null
 
 # ---------------------------------------------------------------- browsers
 Say "Website blocker: $names"
-$chromium = (& $Node (Join-Path $Dest "browsers\policies.js") chromium | Out-String) | ConvertFrom-Json
-$firefox = (& $Node (Join-Path $Dest "browsers\policies.js") firefox | Out-String) | ConvertFrom-Json
+$policiesScript = Join-Path $Dest "browsers\policies.js"
 foreach ($b in $AllBrowsers) {
     Remove-BrowserPolicy $b
-    if ($Browsers -notcontains $b) { continue }
+    $sites01 = "0"
+    if ($Browsers -contains $b) { $sites01 = "1" }
+    # Adult settings go to every browser, picked for the site list or not.
     if ($b -eq "firefox") {
-        Set-UrlList "$($PolicyKeys[$b])\Block" $firefox.Block
-        Set-UrlList "$($PolicyKeys[$b])\Exceptions" $firefox.Exceptions
+        $policy = (& $Node $policiesScript firefox $sites01 $Adult01 | Out-String) | ConvertFrom-Json
     } else {
-        Set-UrlList "$($PolicyKeys[$b])\URLBlocklist" $chromium.URLBlocklist
-        Set-UrlList "$($PolicyKeys[$b])\URLAllowlist" $chromium.URLAllowlist
+        $policy = (& $Node $policiesScript chromium $b $sites01 $Adult01 | Out-String) | ConvertFrom-Json
     }
+    if (@($policy.PSObject.Properties).Count) { Set-Policy $PolicyKeys[$b] $policy }
 }
 
 # ---------------------------------------------------------------- check

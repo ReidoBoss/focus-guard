@@ -2,10 +2,11 @@
 
 [![test](https://github.com/ReidoBoss/focus-guard/actions/workflows/test.yml/badge.svg)](https://github.com/ReidoBoss/focus-guard/actions/workflows/test.yml)
 
-Two self-control tools for people who want to get better at life:
+Self-control tools for people who want to get better at life:
 
 - **Dota Limit**: one best-of-3 Dota 2 series per day. When the series is decided (2-0, 0-2, or after game 3), Steam is closed and stays closed until 4 AM. Saturday and Sunday can have their own limit, like 7 games. Comes with a stats page at **http://dota-limiter-stats**.
 - **Website blocker**: blocks Facebook, YouTube and Reddit, except **facebook.com/messages**, in Brave, Chrome, Edge, Firefox and Chromium. On macOS it can also stop Safari from opening.
+- **Adult website block** (optional): blocks porn and other adult sites in every browser and app, and turns on SafeSearch.
 
 Works on **macOS**, **Ubuntu / Debian** and **Windows 10 / 11**.
 
@@ -50,6 +51,9 @@ What should happen to Safari?          (macOS only)
   1) Leave Safari alone
   2) Stop Safari from opening
 
+3. Adult websites
+Block adult websites? (y/n) [n]:
+
 Summary ... Install with these settings? (y/n) [y]:
 ```
 
@@ -62,6 +66,7 @@ Running the installer again is how you change settings. Your last answers become
 3. Starts a background service that runs on every boot (launchd, systemd, or a Windows scheduled task).
 4. Adds `dota-limiter-stats` to your hosts file so the stats page has a real address.
 5. Applies the block list to the browsers you picked, as browser policies.
+6. If you chose to block adult websites, switches this computer's DNS to the family filter and adds the SafeSearch policies (see below).
 
 ### Browser support
 
@@ -80,6 +85,17 @@ Running the installer again is how you change settings. Your last answers become
 
 **Ubuntu**: policies work with browsers from `.deb` packages and the Firefox and Chromium snaps. Brave and Chrome from Flatpak ignore them.
 
+### Adult website block
+
+There are far too many adult sites for a block list, so this works through DNS, the internet's address book. Your computer's DNS is switched to [Cloudflare for Families](https://one.one.one.one/family/) (`1.1.1.3`), a free service that refuses to look up adult and malware sites. It works in every browser and app, Safari included. On top of that, browser policies:
+
+- turn on SafeSearch in Google, Bing (Edge) and YouTube, so search results don't show explicit images
+- turn off each browser's own "secure DNS", which would otherwise skip the filter
+
+On macOS and Windows every network connection (Wi-Fi, Ethernet, a USB adapter) gets the filter, and the service puts it back within a minute if a new connection appears or someone changes it. On Ubuntu it's set through `systemd-resolved`. Your old DNS settings are saved, and saying no on a later run, or uninstalling, puts them back.
+
+What it can't stop: a VPN, iCloud Private Relay in Safari (it uses its own DNS, so turn it off in System Settings > Apple Account > iCloud), or Firefox's SafeSearch (Firefox has no setting for it, but adult sites are still blocked by the DNS filter).
+
 ### One manual step: the extension
 
 Facebook is a single-page app: clicking **Home** inside Messages changes the page without a real page load, so a block list alone can't catch it. The extension sends you back to `/messages` when that happens. Browsers don't let installers add extensions, so do this once in each browser:
@@ -91,7 +107,7 @@ Facebook is a single-page app: clicking **Home** inside Messages changes the pag
    - Windows: `C:\Program Files\FocusGuard\browsers\extension`
 3. Quit the browser fully and open it again.
 
-On macOS there's one more click: the installer opens **System Settings > General > Device Management**. Double-click **Focus Guard (website blocker)**, press **Install**, then press Enter in the installer. macOS doesn't let scripts install profiles silently.
+On macOS there's one more click, also needed for the adult website block: the installer opens **System Settings > General > Device Management**. Double-click **Focus Guard (website blocker)**, press **Install**, then press Enter in the installer. macOS doesn't let scripts install profiles silently.
 
 ## Stats page
 
@@ -186,6 +202,7 @@ The easy way is to run the installer again and give different answers. You can a
 | `postGameGraceSeconds` | `90` | Time on the result screen before Steam closes. |
 | `dotaEnabled` | `true` | `false` turns the Dota limit off. |
 | `blockSafari` | `false` | macOS: `true` closes Safari whenever it opens. |
+| `blockAdult` | `false` | `true` keeps the family DNS filter on. Change it by running the installer again, which also sets the browser policies. |
 | `opendota` | `true` | Look up teammates and enemies on OpenDota after each match. |
 | `opendotaApiKey` | none | Optional [OpenDota API key](https://www.opendota.com/api-keys) for higher limits. |
 | `tiltCheck` | `true` | Notification after a loss. |
@@ -228,6 +245,7 @@ It asks you to confirm first. Then remove the extension from each browser's exte
 - **Games aren't being counted.** Open the stats page during a match. If it doesn't show a live game, run the installer again with Steam closed, then check that Dota's launch options (Steam > Dota 2 > Properties) include `-gamestateintegration`.
 - **Dota was installed after Focus Guard.** Run the installer again so it can find Dota.
 - **Logs**: `log.txt` next to `config.json`.
+- **An adult site still loads**: fully quit and reopen the browser, and turn off any VPN or iCloud Private Relay. In a browser, `about:policies` or `chrome://policy` should show `DnsOverHttpsMode` set to `off`.
 - **A browser still loads a blocked site**: fully quit and reopen it. Check `brave://policy`, `chrome://policy`, `edge://policy` or `about:policies` in Firefox to see the block list.
 
 ## Limits

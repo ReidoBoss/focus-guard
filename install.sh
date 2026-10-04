@@ -196,8 +196,14 @@ if [ "$UNINSTALL" = 1 ]; then
   fi
   remove_hosts_entry
   NODE_FOR_UNINSTALL="$(command -v node || true)"
+  for p in /opt/homebrew/bin/node /usr/local/bin/node /usr/bin/node; do
+    if [ -z "$NODE_FOR_UNINSTALL" ] && [ -x "$p" ]; then NODE_FOR_UNINSTALL="$p"; fi
+  done
+  if [ -n "$NODE_FOR_UNINSTALL" ] && [ -f "$DEST/browsers/dns.js" ]; then
+    "$NODE_FOR_UNINSTALL" "$DEST/browsers/dns.js" off >/dev/null || warn "Couldn't put your DNS settings back. Set them to automatic in your network settings."
+  fi
   if [ "$OS" = Linux ] && [ -f "$FIREFOX_POLICY" ] && [ -n "$NODE_FOR_UNINSTALL" ] && [ -f "$DEST/browsers/policies.js" ]; then
-    "$NODE_FOR_UNINSTALL" "$DEST/browsers/policies.js" firefox-merge "$FIREFOX_POLICY" 0 > "$FIREFOX_POLICY.tmp" && mv "$FIREFOX_POLICY.tmp" "$FIREFOX_POLICY"
+    "$NODE_FOR_UNINSTALL" "$DEST/browsers/policies.js" firefox-merge "$FIREFOX_POLICY" 0 0 > "$FIREFOX_POLICY.tmp" && mv "$FIREFOX_POLICY.tmp" "$FIREFOX_POLICY"
   fi
   rm -rf "$DEST"
   say "Done. Remove the Focus Guard extension from your browsers' extension pages yourself."
@@ -340,6 +346,16 @@ if [ "$OS" = Darwin ]; then
   if [ "$pick" = 2 ]; then BLOCK_SAFARI=true; fi
 fi
 
+# Adult websites
+PREV_ADULT="$(prev blockAdult false)"
+BLOCK_ADULT=false
+tell ""
+tell "$(bold "3. Adult websites")"
+tell "Blocks porn and other adult sites in every browser and app, by switching this computer's"
+tell "DNS to Cloudflare's free family filter. Also turns on SafeSearch in Google, Bing and YouTube."
+if yesno "Block adult websites?" "$( [ "$PREV_ADULT" = true ] && echo y || echo n )"; then BLOCK_ADULT=true; fi
+ADULT01="$( [ "$BLOCK_ADULT" = true ] && echo 1 || echo 0 )"
+
 # Summary
 names=""
 IFS=',' read -r -a picked <<< "$BROWSERS"
@@ -363,14 +379,15 @@ else
 fi
 tell "  Website blocker:  ${names:-off}"
 if [ "$OS" = Darwin ]; then tell "  Safari:           $( [ "$BLOCK_SAFARI" = true ] && echo "blocked" || echo "left alone" )"; fi
+tell "  Adult websites:   $( [ "$BLOCK_ADULT" = true ] && echo "blocked" || echo "not blocked" )"
 tell ""
 if [ "$INTERACTIVE" = 1 ] && ! yesno "Install with these settings?" y; then
   echo "Nothing changed."
   exit 0
 fi
 
-CHOICES="$("$NODE" -e 'const [d,m,g,wm,wg,h,b,s,o,t]=process.argv.slice(1);console.log(JSON.stringify({dotaEnabled:d==="true",mode:m,maxGames:Number(g),weekendMode:wm,weekendMaxGames:Number(wg),resetHour:Number(h),browsers:b,blockSafari:s==="true",opendota:o==="true",tiltCheck:t==="true"}))' \
-  "$DOTA_ENABLED" "$MODE" "$MAX_GAMES" "$WEEKEND_MODE" "$WEEKEND_MAX" "$RESET_HOUR" "$BROWSERS" "$BLOCK_SAFARI" "$OPENDOTA" "$TILT")"
+CHOICES="$("$NODE" -e 'const [d,m,g,wm,wg,h,b,s,a,o,t]=process.argv.slice(1);console.log(JSON.stringify({dotaEnabled:d==="true",mode:m,maxGames:Number(g),weekendMode:wm,weekendMaxGames:Number(wg),resetHour:Number(h),browsers:b,blockSafari:s==="true",blockAdult:a==="true",opendota:o==="true",tiltCheck:t==="true"}))' \
+  "$DOTA_ENABLED" "$MODE" "$MAX_GAMES" "$WEEKEND_MODE" "$WEEKEND_MAX" "$RESET_HOUR" "$BROWSERS" "$BLOCK_SAFARI" "$BLOCK_ADULT" "$OPENDOTA" "$TILT")"
 
 # ---------------------------------------------------------------- files
 say "Installing to $DEST"
@@ -420,6 +437,17 @@ if [ "$DOTA_ENABLED" = true ]; then
 fi
 FG_DETECTED="$DETECTED" FG_CHOICES="$CHOICES" "$NODE" "$DEST/dota-limit/setup.js" write-config "$DEST/dota-limit/config.json" "$USER_NAME" >/dev/null
 
+# ---------------------------------------------------------------- adult websites
+# Before the service starts, since the service re-applies the filter when it's on.
+if [ "$BLOCK_ADULT" = true ]; then
+  say "Blocking adult websites"
+  "$NODE" "$DEST/browsers/dns.js" on >/dev/null \
+    || warn "Couldn't change this computer's DNS settings, so adult sites are only hidden from Google, Bing and YouTube searches."
+elif [ "$PREV_ADULT" = true ]; then
+  say "Unblocking adult websites"
+  "$NODE" "$DEST/browsers/dns.js" off >/dev/null || warn "Couldn't put your DNS settings back. Set them to automatic in your network settings."
+fi
+
 # ---------------------------------------------------------------- service
 say "Starting the background service"
 if [ "$OS" = Darwin ]; then
@@ -466,12 +494,12 @@ if [ "$OS" = Darwin ]; then dscacheutil -flushcache; killall -HUP mDNSResponder 
 # ---------------------------------------------------------------- browsers
 say "Website blocker: ${names:-off}"
 if [ "$OS" = Darwin ]; then
-  if [ -z "$BROWSERS" ]; then
+  if [ -z "$BROWSERS" ] && [ "$BLOCK_ADULT" = false ]; then
     remove_mac_profiles
   else
-    PROFILE_ID="$("$NODE" "$DEST/browsers/policies.js" profile-id "$BROWSERS")"
+    PROFILE_ID="$("$NODE" "$DEST/browsers/policies.js" profile-id "$BROWSERS" "$ADULT01")"
     PROFILE="$DEST/browsers/focus-guard.mobileconfig"
-    "$NODE" "$DEST/browsers/policies.js" mobileconfig "$BROWSERS" > "$PROFILE"
+    "$NODE" "$DEST/browsers/policies.js" mobileconfig "$BROWSERS" "$ADULT01" > "$PROFILE"
     if mac_profiles | grep -qx "$PROFILE_ID"; then
       echo "Browser profile is already up to date."
     elif [ -z "${CI:-}" ]; then
@@ -488,20 +516,21 @@ if [ "$OS" = Darwin ]; then
   fi
 else
   for b in $BROWSERS_ALL; do
+    sites01="$( [[ ",$BROWSERS," == *",$b,"* ]] && echo 1 || echo 0 )"
     for d in $(linux_policy_dirs "$b"); do
-      if [[ ",$BROWSERS," == *",$b,"* ]]; then
+      if [ "$sites01" = 1 ] || [ "$BLOCK_ADULT" = true ]; then
         mkdir -p "$d"
-        "$NODE" "$DEST/browsers/policies.js" chromium > "$d/focus-guard.json"
+        "$NODE" "$DEST/browsers/policies.js" chromium "$b" "$sites01" "$ADULT01" > "$d/focus-guard.json"
         chmod 644 "$d/focus-guard.json"
       else
         rm -f "$d/focus-guard.json"
       fi
     done
   done
-  if [[ ",$BROWSERS," == *",firefox,"* ]] || [ -f "$FIREFOX_POLICY" ]; then
+  if [[ ",$BROWSERS," == *",firefox,"* ]] || [ "$BLOCK_ADULT" = true ] || [ -f "$FIREFOX_POLICY" ]; then
     mkdir -p "$(dirname "$FIREFOX_POLICY")"
     on="$( [[ ",$BROWSERS," == *",firefox,"* ]] && echo 1 || echo 0 )"
-    "$NODE" "$DEST/browsers/policies.js" firefox-merge "$FIREFOX_POLICY" "$on" > "$FIREFOX_POLICY.tmp"
+    "$NODE" "$DEST/browsers/policies.js" firefox-merge "$FIREFOX_POLICY" "$on" "$ADULT01" > "$FIREFOX_POLICY.tmp"
     mv "$FIREFOX_POLICY.tmp" "$FIREFOX_POLICY" && chmod 644 "$FIREFOX_POLICY"
   fi
 fi
