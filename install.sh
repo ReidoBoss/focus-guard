@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Focus Guard installer for macOS and Linux (Ubuntu/Debian).
 #
-#   curl -fsSL https://raw.githubusercontent.com/ReidoBoss/focus-guard/main/install.sh | sudo bash
+#   sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/ReidoBoss/focus-guard/main/install.sh)"
 #
-# Options (after "sudo bash -s --" when piping):
+# Options (after "--" at the end of that line):
 #   --yes         don't ask anything, use the last answers (or the recommended ones)
 #   --uninstall   remove Focus Guard
 set -euo pipefail
@@ -92,6 +92,19 @@ case "$OS" in
   Linux) DEST=/opt/focus-guard ;;
   *) die "Unsupported OS: $OS. On Windows use install.ps1." ;;
 esac
+
+# sudo-rs, the default sudo on newer Ubuntu, runs a script piped into it ("curl ... | sudo bash")
+# in a terminal of its own and never passes it your keystrokes, so the first question would
+# wait forever. With "sudo bash -c" the keyboard is stdin and the questions work.
+if [ "$INTERACTIVE" = 1 ] && [ ! -t 0 ] && [ "$OS" = Linux ]; then
+  SUDO_EXE="$(readlink "/proc/$PPID/exe" 2>/dev/null || true)"
+  if [[ "${SUDO_EXE##*/}" == sudo* ]] && [[ "$("$SUDO_EXE" -V 2>/dev/null || true)" == sudo-rs* ]]; then
+    FIX_CMD="sudo bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh)\""
+    if [ $# -gt 0 ]; then FIX_CMD="$FIX_CMD -- $*"; fi
+    printf '\033[31m[x] %s\033[0m\n\n  %s\n\n' "This version of sudo can't pass your answers to a script piped into it, so the questions would wait forever. Nothing was changed. Run this instead:" "$FIX_CMD" >&2
+    exit 1
+  fi
+fi
 
 # The person who uses Steam and the browsers, not root.
 USER_NAME="${SUDO_USER:-}"

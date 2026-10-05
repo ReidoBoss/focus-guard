@@ -12,7 +12,7 @@ Self-control tools installed with one command on macOS, Ubuntu and Windows:
 
 | Path | What it is |
 |---|---|
-| `install.sh` | Installer for macOS and Linux. Runs as root via `curl ... \| sudo bash`. |
+| `install.sh` | Installer for macOS and Linux. Runs as root via `sudo bash -c "$(curl ...)"`. |
 | `install.ps1` | Installer for Windows. Runs as admin via `irm ... \| iex`. |
 | `dota-limit/daemon.js` | The service. GSI endpoint on `127.0.0.1:43210`, stats page on port 80 (falls back to 8787), process killing, notifications. |
 | `dota-limit/setup.js` | Install-time helper. `detect` (run as the Steam user) finds Dota, writes the GSI file and patches launch options. `write-config` (run as root) merges `config.json`. |
@@ -45,7 +45,8 @@ Install locations: `/usr/local/focus-guard` (macOS), `/opt/focus-guard` (Linux),
 
 - **Old runtimes.** Code the installers run (`dota-limit/*.js`, `browsers/*.js`) must work on Node 12, because Ubuntu 22.04's apt `nodejs` is v12. Don't use `?.`, `??`, or newer APIs there. The `.html` pages, `topbar.js` and `extension/` run in browsers, so they're exempt.
 - **PowerShell 5.1.** `install.ps1` must run in Windows PowerShell 5.1: no ternaries, no `??`, and `else` / `elseif` on the same line as the closing `}`. Never pass JSON as a native-command argument, because 5.1 mangles the quotes. Use env vars, like `FG_DETECTED`.
-- **Questions on macOS and Linux** read from and write to `/dev/tty`, because stdin is the piped script. Every prompt helper must return its default immediately when `INTERACTIVE=0`, or a bad saved default loops forever.
+- **Questions on macOS and Linux** read from and write to `/dev/tty`, so they also work when the script is piped in. Every prompt helper must return its default immediately when `INTERACTIVE=0`, or a bad saved default loops forever.
+- **Never tell people to run `curl ... | sudo bash`.** sudo-rs, the default sudo on newer Ubuntu, runs a piped-in script in a terminal of its own and never passes it keystrokes, so the first question hangs (the read is stopped, state `T` in `ps`). `sudo bash -c "$(curl ...)"` keeps the keyboard on stdin, and options go after `--`. `install.sh` stops with that command when it's piped in under sudo-rs. The whole script travels as one argument, which Linux caps at 128 KB, so keep `install.sh` well under that.
 - **Never run `pkill -f` on a broad Steam pattern.** macOS launchd respawns Steam's `ipcserver` every few seconds; killing it caused a notification loop. `isSteam()` targets only `steam_osx` / `Steam Helper.app`, `steam` / `steamwebhelper` on Linux, and `steam.exe` / `steamwebhelper.exe` on Windows.
 - **macOS privacy rules block the root daemon from external drives.** So on macOS the GSI file is written by `setup.js detect` as the user, and `ensureGsiConfig()` failing there is expected. Linux and Windows can restore the file from the daemon.
 - **Steam rewrites `localconfig.vdf` when it quits**, so Steam must be closed before launch options are patched. `vdf.js` must keep round-tripping Steam's files byte for byte. Check against a real `localconfig.vdf` after any parser change.

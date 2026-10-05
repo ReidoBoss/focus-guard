@@ -42,7 +42,7 @@ jobs:
       - name: README one-liner (macOS / Linux)
         if: runner.os != 'Windows' && github.ref == 'refs/heads/main'
         run: |
-          curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/install.sh" | sudo CI=1 bash
+          sudo CI=1 bash -c "$(curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/install.sh")"
           curl -fs "$(curl -s -o /dev/null -w '%{redirect_url}' http://127.0.0.1:43210/)api" | grep -q '"lockedAt":"'
 
       - name: README one-liner (Windows)

@@ -99,7 +99,7 @@ async function render(file, settings) {
   page = await render("settings.html", base);
   assert.ok(page.includes("4 games") && page.includes("Same as weekdays") && page.includes("12 AM"), "limit, weekend and reset hour");
   assert.ok(/Tilt check[\s\S]*?Off/.test(page) && page.includes("Not yet"), "features and account");
-  assert.ok(page.includes("install.sh | sudo bash") && page.includes("/usr/local/focus-guard/dota-limit/config.json"));
+  assert.ok(page.includes("sudo bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ReidoBoss/focus-guard/main/install.sh)&quot;") && page.includes("/usr/local/focus-guard/dota-limit/config.json"));
   page = await render("settings.html", Object.assign({}, base, { os: "windows", installDir: "C:\\Program Files\\FocusGuard", config: Object.assign({}, base.config, { mode: "bo3", resetHour: 16 }) }));
   assert.ok(page.includes("Best of 3") && page.includes("4 PM"));
   assert.ok(page.includes("install.ps1 | iex") && page.includes("C:\\Program Files\\FocusGuard\\dota-limit\\config.json"), "Windows command and path");

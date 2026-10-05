@@ -19,7 +19,7 @@ Copy one command, paste it, enter your password, and answer a few questions. Pre
 Open **Terminal** and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ReidoBoss/focus-guard/main/install.sh | sudo bash
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/ReidoBoss/focus-guard/main/install.sh)"
 ```
 
 ### Windows
@@ -57,7 +57,7 @@ Block adult websites? (y/n) [n]:
 Summary ... Install with these settings? (y/n) [y]:
 ```
 
-Running the installer again is how you change settings. Your last answers become the suggested ones, and today's games are kept. To skip the questions, add `--yes` (macOS / Ubuntu: `... | sudo bash -s -- --yes`, Windows: `-Yes`).
+Running the installer again is how you change settings. Your last answers become the suggested ones, and today's games are kept. To skip the questions, add `--yes` (macOS / Ubuntu: put `-- --yes` at the end of the command, Windows: `-Yes`).
 
 ### What the installer does
 
@@ -249,7 +249,7 @@ Loopholes it closes:
 macOS and Ubuntu:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ReidoBoss/focus-guard/main/install.sh | sudo bash -s -- --uninstall
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/ReidoBoss/focus-guard/main/install.sh)" -- --uninstall
 ```
 
 Windows (PowerShell as Administrator):
