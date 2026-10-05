@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blocked sites</title>
+<script src="/topbar.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #0d0f13; --panel: #151920; --panel-2: #1b2029; --line: #262c37; --text: #e8eaee; --muted: #8a93a3; --accent: #f5b642; --win: #4ade80; --loss: #f87171; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 32px 0 12px; font-weight: 600; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .sites { display: flex; flex-wrap: wrap; gap: 8px; }
+  .site { font: 500 13px/1 "JetBrains Mono", monospace; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); }
+  .site.block { color: var(--loss); }
+  .site.allow { color: var(--win); }
+  .rows > div { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); align-items: center; }
+  .rows > div:first-child { border-top: 0; }
+  .rows .sub { color: var(--muted); font-size: 13px; }
+  .on { color: var(--win); font-weight: 600; } .off { color: var(--muted); font-weight: 600; } .warn { color: var(--accent); font-weight: 600; }
+  code { font: 500 13px/1.5 "JetBrains Mono", monospace; background: var(--panel-2); padding: 2px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Blocked sites</h1>
+  <div class="note">What Focus Guard blocks on this computer right now.</div>
+  <div id="body"><div class="note">Loading...</div></div>
+</div>
+<script>
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const NAMES = { brave: "Brave", chrome: "Google Chrome", chromium: "Chromium", edge: "Microsoft Edge", firefox: "Firefox" };
+  const row = (title, sub, state, cls) => `<div><div><div>${title}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div><div class="${cls}">${state}</div></div>`;
+
+  function render(s) {
+    const browsers = s.browsers.map((b) => NAMES[b] || b);
+    const allow = s.sites.allow.length
+      ? `<h2>Still allowed</h2><div class="card"><div class="sites">${s.sites.allow.map((a) => `<span class="site allow">${esc(a)}</span>`).join("")}</div>
+         <div class="note">Parts of blocked sites you can still open, like Messenger on facebook.com.</div></div>` : "";
+    let adult = row("Adult websites", "Family DNS filter on every connection, plus SafeSearch in every browser.", s.adult.on ? "On" : "Off", s.adult.on ? "on" : "off");
+    if (s.adult.on && s.adult.problem) adult += row("Last DNS check had a problem", esc(s.adult.problem), "Check", "warn");
+    document.getElementById("body").innerHTML = `
+      <h2>Sites</h2>
+      <div class="card"><div class="sites">${s.sites.block.map((b) => `<span class="site block">${esc(b)}</span>`).join("") || '<span class="note">None</span>'}</div>
+        <div class="note">Every page on these sites, including their subdomains.</div></div>
+      ${allow}
+      <h2>Where</h2>
+      <div class="card rows">
+        ${row("Browsers", browsers.length ? esc(browsers.join(", ")) : "No browsers were picked when Focus Guard was installed.", browsers.length ? "Blocked" : "None", browsers.length ? "on" : "off")}
+        ${s.os === "mac" ? row("Safari", "Safari can't block single sites, so it can only be closed whenever it opens.", s.blockSafari ? "Closed" : "Allowed", s.blockSafari ? "on" : "off") : ""}
+        ${adult}
+      </div>
+      <h2>Changing the list</h2>
+      <div class="card">
+        Download Focus Guard (<code>git clone https://github.com/ReidoBoss/focus-guard</code>), edit <code>browsers/sites.json</code> in it,
+        then run its installer: <code>${s.os === "windows" ? ".\\install.ps1" : "sudo bash install.sh"}</code>${s.os === "windows" ? " in PowerShell as Administrator" : ""}.
+        <div class="note">The copy in the install folder is replaced on every install, so editing it doesn't last.
+        The installer asks for your password on purpose: unblocking a site should take a moment to think about.</div>
+      </div>`;
+  }
+
+  (async () => {
+    try {
+      render(await (await fetch("/api/settings", { cache: "no-store" })).json());
+    } catch (e) {
+      document.getElementById("body").innerHTML = '<div class="note">Couldn\'t reach the Focus Guard service.</div>';
+    }
+  })();
+</script>
+</body>
+</html>

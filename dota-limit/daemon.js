@@ -15,8 +15,8 @@ const CONFIG = JSON.parse(fs.readFileSync(path.join(DIR, "config.json"), "utf8")
 const STATE_FILE = path.join(DIR, "state.json");
 const HISTORY_FILE = path.join(DIR, "history.json");
 const LOG_FILE = path.join(DIR, "log.txt");
-const STATS_PAGE = path.join(DIR, "stats.html");
-const NEWS_PAGE = path.join(DIR, "news.html");
+// The site's tabs. topbar.js draws the bar that links them.
+const PAGES = { "/": "news.html", "/dota": "stats.html", "/blocked": "blocked.html", "/settings": "settings.html" };
 const STATS_HOST = "home";
 // Port 80 gives the page a clean address. If something else owns it (IIS, for
 // example), the page falls back to this port and the address includes it.
@@ -638,15 +638,38 @@ function status() {
   };
 }
 
-// Headlines for /news. Links to sites the website blocker blocks are left out.
-function blockedSites() {
+function readJson(file, fallback) {
   try {
-    return JSON.parse(fs.readFileSync(path.join(DIR, "..", "browsers", "sites.json"), "utf8")).block || [];
+    return JSON.parse(fs.readFileSync(file, "utf8"));
   } catch (e) {
-    return [];
+    return fallback;
   }
 }
-const news = createNews({ dir: DIR, blocked: blockedSites(), log });
+const SITES = readJson(path.join(DIR, "..", "browsers", "sites.json"), { block: [], allow: [] });
+
+// Headlines for the front page. Links to sites the website blocker blocks are left out.
+const news = createNews({ dir: DIR, blocked: SITES.block || [], log });
+
+// What the Blocked sites and Settings tabs show: the settings the service is running with.
+// Read-only on purpose. Loosening a limit should take the installer and an admin password,
+// and anything on 127.0.0.1 can be reached by any website the browser opens.
+function settings() {
+  const choices = readJson(path.join(DIR, "..", "choices.json"), {});
+  const keys = ["mode", "maxGames", "weekendMode", "weekendMaxGames", "resetHour", "postGameGraceSeconds", "opendota", "tiltCheck", "parseReplays", "weeklySummary"];
+  const config = {};
+  for (const k of keys) config[k] = CONFIG[k];
+  return {
+    os: IS_WIN ? "windows" : IS_MAC ? "mac" : "linux",
+    installDir: path.join(DIR, ".."),
+    dotaEnabled: DOTA_ENABLED,
+    hasAccount: !!myAccountId(),
+    config,
+    browsers: String(choices.browsers || "").split(",").filter(Boolean),
+    sites: { block: SITES.block || [], allow: SITES.allow || [] },
+    blockSafari: BLOCK_SAFARI,
+    adult: { on: BLOCK_ADULT, problem: lastDnsError || null },
+  };
+}
 
 // The site, reached through the hosts entry "home": news at /, Dota stats at /dota.
 const statsServer = http.createServer((req, res) => {
@@ -686,6 +709,11 @@ const statsServer = http.createServer((req, res) => {
       const earliest = days.map((d) => d.day).sort()[0] || state.day;
       return json(Object.assign(insights.weekly(days, start), { thisWeek: insights.weekStartOf(state.day), firstWeek: insights.weekStartOf(earliest) }));
     }
+    if (url === "/api/settings") return json(settings());
+    if (url === "/topbar.js") {
+      res.setHeader("content-type", "text/javascript; charset=utf-8");
+      return fs.createReadStream(path.join(DIR, "topbar.js")).pipe(res);
+    }
     if (url === "/api/news") {
       news.get().then(json, (e) => json({ error: e.message, sections: [] }));
       return;
@@ -706,12 +734,12 @@ const statsServer = http.createServer((req, res) => {
       res.writeHead(302, { location: statsUrl });
       return res.end();
     }
-    if (url !== "/" && url !== "/dota") {
+    if (!PAGES[url]) {
       res.writeHead(302, { location: "/" });
       return res.end();
     }
     res.setHeader("content-type", "text/html; charset=utf-8");
-    fs.createReadStream(url === "/dota" ? STATS_PAGE : NEWS_PAGE).pipe(res);
+    fs.createReadStream(path.join(DIR, PAGES[url])).pipe(res);
   });
 
 function listenStats(port) {
@@ -768,9 +796,9 @@ tick();
 
 // Adult website block: puts the family DNS filter back on a new network connection or
 // after a hand-made change. A separate process, since PowerShell is slow to start.
+let lastDnsError = "";
 if (BLOCK_ADULT) {
   const dnsScript = path.join(DIR, "..", "browsers", "dns.js");
-  let lastDnsError = "";
   setInterval(() => {
     execFile(process.execPath, [dnsScript, "on"], { windowsHide: true, timeout: 60 * 1000 }, (err, out, errOut) => {
       if (err) {

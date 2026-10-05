@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings</title>
+<script src="/topbar.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #0d0f13; --panel: #151920; --panel-2: #1b2029; --line: #262c37; --text: #e8eaee; --muted: #8a93a3; --accent: #f5b642; --win: #4ade80; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 32px 0 12px; font-weight: 600; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .rows > div { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); align-items: center; }
+  .rows > div:first-child { border-top: 0; }
+  .rows .sub { color: var(--muted); font-size: 13px; }
+  .val { font-weight: 600; text-align: right; }
+  .val.on { color: var(--win); } .val.off { color: var(--muted); }
+  pre { margin: 10px 0 0; font: 500 13px/1.5 "JetBrains Mono", monospace; background: var(--panel-2); border: 1px solid var(--line); padding: 10px 12px; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  code { font: 500 13px/1.5 "JetBrains Mono", monospace; background: var(--panel-2); padding: 2px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Settings</h1>
+  <div class="note">The settings Focus Guard is running with.</div>
+  <div id="body"><div class="note">Loading...</div></div>
+</div>
+<script>
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const row = (title, sub, val, cls) => `<div><div><div>${title}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div><div class="val ${cls || ""}">${val}</div></div>`;
+  const onOff = (title, sub, on) => row(title, sub, on ? "On" : "Off", on ? "on" : "off");
+  const hour = (h) => (h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`);
+  const limit = (mode, games) => (mode === "games" ? `${games} games` : "Best of 3");
+  const ONE_LINER = {
+    windows: "irm https://raw.githubusercontent.com/ReidoBoss/focus-guard/main/install.ps1 | iex",
+    other: "curl -fsSL https://raw.githubusercontent.com/ReidoBoss/focus-guard/main/install.sh | sudo bash",
+  };
+
+  function render(s) {
+    const c = s.config;
+    const weekend = c.weekendMode === "same" ? "Same as weekdays" : limit(c.weekendMode, c.weekendMaxGames);
+    const dota = s.dotaEnabled
+      ? `<div class="card rows">
+          ${row("Weekdays", c.mode === "games" ? "Steam closes after this many games." : "Steam closes once you have 2 wins or 2 losses.", limit(c.mode, c.maxGames))}
+          ${row("Saturday and Sunday", "", weekend)}
+          ${row("New day starts at", "A game before this time counts toward the day before.", hour(c.resetHour))}
+          ${row("Time on the result screen", "Before Steam closes after the last game.", `${c.postGameGraceSeconds} seconds`)}
+        </div>
+        <h2>Match extras</h2>
+        <div class="card rows">
+          ${onOff("Teammates and enemies", "Looks up the other players on OpenDota after each match.", c.opendota)}
+          ${onOff("Tilt check", "A notification after a loss telling you what went wrong.", c.tiltCheck)}
+          ${onOff("Replay details", "Lane results and the gold graph, once OpenDota parses the replay.", c.opendota && c.parseReplays)}
+          ${onOff("Weekly summary", "A notification when a new week starts.", c.weeklySummary)}
+          ${row("Your Dota account", s.hasAccount ? "Found from Steam's sign-in file." : "Shows up after your first tracked match.", s.hasAccount ? "Found" : "Not yet", s.hasAccount ? "on" : "off")}
+        </div>`
+      : `<div class="card">The Dota limit is off.</div>`;
+    const cmd = s.os === "windows" ? ONE_LINER.windows : ONE_LINER.other;
+    document.getElementById("body").innerHTML = `
+      <h2>Dota limit</h2>
+      ${dota}
+      <h2>Changing settings</h2>
+      <div class="card">
+        Run the installer again${s.os === "windows" ? " in PowerShell as Administrator" : " in Terminal"}. It asks the same questions, with your current answers as the defaults, and keeps today's games.
+        <pre>${esc(cmd)}</pre>
+        <div class="note">It asks for your password on purpose: a looser limit should take a moment to think about.
+        Settings can't be changed from this page, since any website you open could send this page requests too.</div>
+      </div>
+      <h2>Advanced</h2>
+      <div class="card">
+        Every setting, including ones the installer doesn't ask about, is in <code>${esc(s.installDir)}${s.os === "windows" ? "\\" : "/"}dota-limit${s.os === "windows" ? "\\" : "/"}config.json</code>.
+        Edits to settings the installer doesn't ask about last through reinstalls. They take effect when the service restarts.
+      </div>`;
+  }
+
+  (async () => {
+    try {
+      render(await (await fetch("/api/settings", { cache: "no-store" })).json());
+    } catch (e) {
+      document.getElementById("body").innerHTML = '<div class="note">Couldn\'t reach the Focus Guard service.</div>';
+    }
+  })();
+</script>
+</body>
+</html>

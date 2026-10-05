@@ -19,6 +19,8 @@ Self-control tools installed with one command on macOS, Ubuntu and Windows:
 | `dota-limit/vdf.js` | Valve KeyValues parser/writer. |
 | `dota-limit/gsi.js` | The GSI config file, shared by `setup.js` and `daemon.js`. |
 | `dota-limit/notifier.js` | Windows only. Polls `/notices` and shows toasts in the user's session. |
+| `dota-limit/topbar.js` | Runs in the browser. The tab bar (News, Dota, Blocked sites, Settings) on every page of `http://home`. The routes are `PAGES` in `daemon.js`. |
+| `dota-limit/blocked.html`, `settings.html` | The Blocked sites and Settings tabs. Read-only, from `/api/settings`: loosening a limit must take the installer, and any website can send requests to 127.0.0.1. |
 | `dota-limit/stats.html` | Stats page at `/dota`, served by the daemon. Polls `/api`. Also renders the teammates and enemies panel and decides its labels (`chips()`). |
 | `dota-limit/insights.js` | Hero report, tilt check, lane results, gold swing, counter-picks and weekly summary. Pure functions with no network or file access; the daemon feeds them data. |
 | `dota-limit/news.js` | Headlines for the front page, `http://home/` (`news.html`): 10 per section from RSS feeds, Hacker News, Lobsters and Steam. Fetched only when the page is opened, at most every 3 hours, cached in `news-cache.json`. Drops links to sites in `browsers/sites.json`. |
@@ -27,7 +29,7 @@ Self-control tools installed with one command on macOS, Ubuntu and Windows:
 | `browsers/policies.js` | Generates Chromium policy JSON, Firefox policies, and the macOS `.mobileconfig`. Takes a site-list flag and an adult flag per browser. |
 | `browsers/dns.js` | Turns the family DNS filter on or off. Run by the installers, and every minute by the daemon (as a child process) while `blockAdult` is on. |
 | `browsers/extension/` | MV3 extension for Brave, Chrome, Edge and Chromium. |
-| `test/` | `insights.test.js`, `opendota.test.js` and `news.test.js` (offline, safe to run anywhere) plus the CI-only `fake-steam.js`, `e2e.js` and `interactive.exp`. |
+| `test/` | `insights.test.js`, `opendota.test.js`, `news.test.js` and `pages.test.js` (offline, safe to run anywhere) plus the CI-only `fake-steam.js`, `e2e.js` and `interactive.exp`. |
 
 Install locations: `/usr/local/focus-guard` (macOS), `/opt/focus-guard` (Linux), `C:\Program Files\FocusGuard` (Windows). Services: launchd `local.focusguard`, systemd `focus-guard`, scheduled tasks `FocusGuard` (SYSTEM) and `FocusGuardNotifier` (user).
 
@@ -40,7 +42,7 @@ Install locations: `/usr/local/focus-guard` (macOS), `/opt/focus-guard` (Linux),
 
 ## Rules that aren't obvious from the code
 
-- **Old runtimes.** Code the installers run (`dota-limit/*.js`, `browsers/*.js`) must work on Node 12, because Ubuntu 22.04's apt `nodejs` is v12. Don't use `?.`, `??`, or newer APIs there. `stats.html` and `extension/` run in browsers, so they're exempt.
+- **Old runtimes.** Code the installers run (`dota-limit/*.js`, `browsers/*.js`) must work on Node 12, because Ubuntu 22.04's apt `nodejs` is v12. Don't use `?.`, `??`, or newer APIs there. The `.html` pages, `topbar.js` and `extension/` run in browsers, so they're exempt.
 - **PowerShell 5.1.** `install.ps1` must run in Windows PowerShell 5.1: no ternaries, no `??`, and `else` / `elseif` on the same line as the closing `}`. Never pass JSON as a native-command argument, because 5.1 mangles the quotes. Use env vars, like `FG_DETECTED`.
 - **Questions on macOS and Linux** read from and write to `/dev/tty`, because stdin is the piped script. Every prompt helper must return its default immediately when `INTERACTIVE=0`, or a bad saved default loops forever.
 - **Never run `pkill -f` on a broad Steam pattern.** macOS launchd respawns Steam's `ipcserver` every few seconds; killing it caused a notification loop. `isSteam()` targets only `steam_osx` / `Steam Helper.app`, `steam` / `steamwebhelper` on Linux, and `steam.exe` / `steamwebhelper.exe` on Windows.
@@ -87,6 +89,7 @@ Safe local checks:
 node test/insights.test.js   # hero report, tilt check, lanes, counters, weekly summary
 node test/opendota.test.js   # OpenDota lookups and the whole stats page, against canned answers
 node test/news.test.js       # news feeds and the news page, against canned feeds
+node test/pages.test.js      # tab bar, Blocked sites and Settings tabs
 node browsers/dns.js status  # read-only; "on" and "off" change this machine's DNS
 for f in dota-limit/*.js browsers/*.js browsers/extension/*.js test/*.js; do node --check "$f" || echo "FAIL $f"; done
 bash -n install.sh

@@ -122,9 +122,13 @@ Open **http://home/dota** (type the `http://` so your browser doesn't search for
 
 The links at the top of the page jump to each section.
 
+### The app at http://home
+
+Focus Guard's pages share one tab bar: **News**, **Dota** (the stats page), **Blocked sites** (what's blocked, in which browsers, and whether the adult website block is on) and **Settings** (your Dota limit and the installer command to change it). Blocked sites and Settings only show settings. Changing them still takes the installer and your password, so loosening a limit takes a moment to think about.
+
 ### News
 
-**http://home** (or the **News** link on the stats page) is a short daily briefing for when Reddit is blocked: 10 headlines each for Programming, AI, Philippines, PH tech and startups, World, and Dota 2.
+**http://home** is a short daily briefing for when Reddit is blocked: 10 headlines each for Programming, AI, Philippines, PH tech and startups, World, and Dota 2.
 
 - Sources: Hacker News and Lobsters, Simon Willison, The Verge and TechCrunch, Rappler, Inquirer, GMA News and Philstar, Google News (for PH tech and startups), BBC, Al Jazeera and The Guardian, and Steam's Dota 2 announcements.
 - Headlines link to the article, never to a comment thread. Links to blocked sites are left out.
@@ -218,7 +222,7 @@ The easy way is to run the installer again and give different answers. You can a
 | `weeklySummary` | `true` | Notification when a new week starts. |
 | `accountId` | from Steam | Your Dota account ID, used for the hero report and counter-picks. |
 
-The blocked and allowed sites are in `browsers/sites.json` (in this repo, or in the install folder).
+The blocked and allowed sites are in `browsers/sites.json`. To change them, edit that file in a copy of this repo (`git clone https://github.com/ReidoBoss/focus-guard`) and run that copy's installer (`sudo bash install.sh`, or `.\install.ps1` as Administrator on Windows). Editing the copy in the install folder doesn't last, because every install replaces it. The **Blocked sites** tab at http://home/blocked shows the list in use.
 
 ## How it works
 
