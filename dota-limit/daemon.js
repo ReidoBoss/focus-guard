@@ -8,6 +8,7 @@ const { execFile, execFileSync } = require("child_process");
 const { gsiPath, gsiConfig } = require("./gsi");
 const { createOpenDota, accountIdFromSteamId, RETRY_MINUTES } = require("./opendota");
 const insights = require("./insights");
+const { createNews } = require("./news");
 
 const DIR = __dirname;
 const CONFIG = JSON.parse(fs.readFileSync(path.join(DIR, "config.json"), "utf8"));
@@ -15,6 +16,7 @@ const STATE_FILE = path.join(DIR, "state.json");
 const HISTORY_FILE = path.join(DIR, "history.json");
 const LOG_FILE = path.join(DIR, "log.txt");
 const STATS_PAGE = path.join(DIR, "stats.html");
+const NEWS_PAGE = path.join(DIR, "news.html");
 const STATS_HOST = "dota-limiter-stats";
 // Port 80 gives the page a clean address. If something else owns it (IIS, for
 // example), the page falls back to this port and the address includes it.
@@ -636,6 +638,16 @@ function status() {
   };
 }
 
+// Headlines for /news. Links to sites the website blocker blocks are left out.
+function blockedSites() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(DIR, "..", "browsers", "sites.json"), "utf8")).block || [];
+  } catch (e) {
+    return [];
+  }
+}
+const news = createNews({ dir: DIR, blocked: blockedSites(), log });
+
 // Stats site, reached through the hosts entry "dota-limiter-stats".
 const statsServer = http.createServer((req, res) => {
     const url = req.url.split("?")[0];
@@ -674,6 +686,10 @@ const statsServer = http.createServer((req, res) => {
       const earliest = days.map((d) => d.day).sort()[0] || state.day;
       return json(Object.assign(insights.weekly(days, start), { thisWeek: insights.weekStartOf(state.day), firstWeek: insights.weekStartOf(earliest) }));
     }
+    if (url === "/api/news") {
+      news.get().then(json, (e) => json({ error: e.message, sections: [] }));
+      return;
+    }
     const counterAsk = url.match(/^\/api\/counters\/(npc_dota_hero_[a-z_]+)$/);
     if (counterAsk) {
       const hero = counterAsk[1];
@@ -691,7 +707,7 @@ const statsServer = http.createServer((req, res) => {
       return res.end();
     }
     res.setHeader("content-type", "text/html; charset=utf-8");
-    fs.createReadStream(STATS_PAGE).pipe(res);
+    fs.createReadStream(url === "/news" ? NEWS_PAGE : STATS_PAGE).pipe(res);
   });
 
 function listenStats(port) {

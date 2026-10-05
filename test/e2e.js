@@ -183,6 +183,8 @@ const gsi = (matchid, game_state, win_team) => ({
   }, 30);
   check(`stats page uses the dota-limiter-stats address (${statsUrl})`, /^http:\/\/dota-limiter-stats(:\d+)?\/$/.test(statsUrl));
   await waitFor("stats page answers", async () => (await request(statsUrl)).body.includes("Dota Limiter"), 30);
+  // Only the page itself: /api/news would fetch real feeds from CI.
+  check("news page answers", (await request(`${statsUrl}news`)).body.includes("<title>News</title>"));
 
   const cfg = path.join(fake.dotaDir, "game", "dota", "cfg", "gamestate_integration", "gamestate_integration_dotalimit.cfg");
   check("GSI config written", fs.existsSync(cfg) && fs.readFileSync(cfg, "utf8").includes('"uri"       "http://127.0.0.1:43210/"'));

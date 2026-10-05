@@ -122,6 +122,14 @@ Open **http://dota-limiter-stats** (type the `http://` so Brave doesn't search f
 
 The links at the top of the page jump to each section.
 
+### News
+
+**http://dota-limiter-stats/news** (or the **News** link on the stats page) is a short daily briefing for when Reddit is blocked: 10 headlines each for Programming, AI, Philippines, PH tech and startups, World, and Dota 2.
+
+- Sources: Hacker News and Lobsters, Simon Willison, The Verge and TechCrunch, Rappler, Inquirer, GMA News and Philstar, Google News (for PH tech and startups), BBC, Al Jazeera and The Guardian, and Steam's Dota 2 announcements.
+- Headlines link to the article, never to a comment thread. Links to blocked sites are left out.
+- It updates at most every 3 hours, so reloading doesn't show anything new. The first visit takes a few seconds while it gets the headlines.
+
 ### Your heroes
 
 Your last 90 days from OpenDota, one row per hero: games, win rate, average KDA, GPM, and a trend that compares your win rate in the last 30 days with the 60 before it. At the top: your best and worst hero (10+ games) and the one improving the most. Focus Guard finds your account from Steam's sign-in file, so this works before your first tracked match.

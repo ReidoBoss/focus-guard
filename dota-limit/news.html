@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>News</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f13;
+    --panel: #151920;
+    --line: #262c37;
+    --text: #e8eaee;
+    --muted: #8a93a3;
+    --accent: #f5b642;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 16px 64px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  h1 span { color: var(--muted); font-weight: 500; }
+  .back { font-size: 13px; color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); }
+  .back:hover { color: var(--text); }
+  .note { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 480px), 1fr)); gap: 16px; margin-top: 24px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 8px; min-width: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 8px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+  h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; }
+  ol { list-style: none; margin: 0; padding: 0; counter-reset: n; }
+  li { counter-increment: n; display: grid; grid-template-columns: 26px 1fr; gap: 4px; padding: 9px 0; border-top: 1px solid var(--line); }
+  li:first-child { border-top: 0; }
+  li::before { content: counter(n); font: 700 13px/1.6 "JetBrains Mono", monospace; color: var(--accent); }
+  li a { color: var(--text); text-decoration: none; font-weight: 500; overflow-wrap: anywhere; }
+  li a:hover { text-decoration: underline; }
+  li a:visited { color: var(--muted); }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .empty { color: var(--muted); padding: 12px 0 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>News <span id="day"></span></h1>
+    <a class="back" href="/">Stats page</a>
+  </header>
+  <div class="note" id="note">Getting the headlines. The first time takes a few seconds.</div>
+  <div class="grid" id="sections"></div>
+</div>
+<script>
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const clock = (t) => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+  function ago(t) {
+    if (!t) return "";
+    const m = Math.round((Date.now() - t) / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m} min ago`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `${h} h ago`;
+    const d = Math.round(h / 24);
+    return d === 1 ? "yesterday" : `${d} days ago`;
+  }
+
+  function render(data) {
+    document.getElementById("day").textContent = new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+    const next = data.nextAt > Date.now() ? `New headlines after ${clock(data.nextAt)}.` : "New headlines are on the way. Check back later.";
+    document.getElementById("note").textContent = `Updated ${clock(data.fetchedAt)}. ${next}`;
+    document.getElementById("sections").innerHTML = data.sections.map((s) => `
+      <section>
+        <h2>${esc(s.title)}${s.failed.length ? `<small>${esc(s.failed.join(", "))} didn't answer</small>` : ""}</h2>
+        ${s.items.length ? `<ol>${s.items.map((i) => `
+          <li><div><a href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">${esc(i.title)}</a>
+          <div class="meta">${esc(i.source)}${i.time ? " · " + ago(i.time) : ""}</div></div></li>`).join("")}</ol>`
+          : `<div class="empty">No headlines right now.</div>`}
+      </section>`).join("");
+  }
+
+  async function load() {
+    try {
+      const data = await (await fetch("/api/news", { cache: "no-store" })).json();
+      if (!data.sections.length) throw new Error(data.error);
+      render(data);
+    } catch (e) {
+      document.getElementById("note").textContent = "Couldn't get the headlines. Is this computer online?";
+    }
+  }
+  load();
+</script>
+</body>
+</html>

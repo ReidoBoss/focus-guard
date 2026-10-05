@@ -16,10 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Stats page and insights (offline)
+      - name: Stats page, insights and news (offline)
         run: |
           node test/insights.test.js
           node test/opendota.test.js
+          node test/news.test.js
 
       - name: Create a fake Steam + Dota 2 install
         run: node test/fake-steam.js
