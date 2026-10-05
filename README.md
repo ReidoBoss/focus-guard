@@ -4,7 +4,7 @@
 
 Self-control tools for people who want to get better at life:
 
-- **Dota Limit**: one best-of-3 Dota 2 series per day. When the series is decided (2-0, 0-2, or after game 3), Steam is closed and stays closed until 4 AM. Saturday and Sunday can have their own limit, like 7 games. Comes with a stats page at **http://home/dota**.
+- **Dota Limit**: one best-of-3 Dota 2 series per day. When the series is decided (2-0, 0-2, or after game 3), Steam is closed and stays closed until 4 AM. Saturday and Sunday can have their own limit, like 7 games. Comes with a stats page at **http://focus/dota**.
 - **Website blocker**: blocks Facebook, YouTube and Reddit, except **facebook.com/messages** and YouTube's embedded player (for the Videos tab), in Brave, Chrome, Edge, Firefox and Chromium. On macOS it can also stop Safari from opening.
 - **Adult website block** (optional): blocks porn and other adult sites in every browser and app, and turns on SafeSearch.
 
@@ -64,7 +64,7 @@ Running the installer again is how you change settings. Your last answers become
 1. Installs Node.js if you don't have it (apt on Ubuntu, winget on Windows).
 2. Closes Steam (it asks first), finds Dota 2 in any of your Steam libraries, and adds the `-gamestateintegration` launch option for you.
 3. Starts a background service that runs on every boot (launchd, systemd, or a Windows scheduled task).
-4. Adds `home` to your hosts file so the news and stats pages have a real address.
+4. Adds `focus` to your hosts file so the news and stats pages have a real address.
 5. Applies the block list to the browsers you picked, as browser policies.
 6. If you chose to block adult websites, switches this computer's DNS to the family filter and adds the SafeSearch policies (see below).
 
@@ -111,7 +111,7 @@ On macOS there's one more click, also needed for the adult website block: the in
 
 ## Stats page
 
-Open **http://home/dota** (type the `http://` so your browser doesn't search for it).
+Open **http://focus/dota** (type the `http://` so your browser doesn't search for it).
 
 - Today's series score and whether Steam is locked
 - Every match: hero, win or loss, K/D/A, last hits and denies, GPM, XPM, net worth, items, game length and score, plus OpenDota, Dotabuff and STRATZ links
@@ -122,13 +122,13 @@ Open **http://home/dota** (type the `http://` so your browser doesn't search for
 
 The links at the top of the page jump to each section.
 
-### The app at http://home
+### The app at http://focus
 
 Focus Guard's pages share one tab bar: **News**, **Videos**, **Dota** (the stats page), **Blocked sites** (what's blocked, in which browsers, and whether the adult website block is on) and **Settings** (your Dota limit and the installer command to change it). Blocked sites and Settings only show settings. Changing them still takes the installer and your password, so loosening a limit takes a moment to think about.
 
 ### Videos
 
-**http://home/videos** searches YouTube while youtube.com itself stays blocked. You get a search box and a list of results, and nothing else: no home feed, no Shorts, no recommendations, no comments. Live streams and anything under 2 minutes are left out.
+**http://focus/videos** searches YouTube while youtube.com itself stays blocked. You get a search box and a list of results, and nothing else: no home feed, no Shorts, no recommendations, no comments. Live streams and anything under 2 minutes are left out.
 
 - A video plays in YouTube's privacy-mode player (`youtube-nocookie.com/embed`), the one part of YouTube the blocker lets through. When it ends, YouTube only suggests videos from the same channel.
 - Some uploaders turn off playing on other sites. Those videos say they can't play here. Pick another result.
@@ -136,7 +136,7 @@ Focus Guard's pages share one tab bar: **News**, **Videos**, **Dota** (the stats
 
 ### News
 
-**http://home** is a short daily briefing for when Reddit is blocked: 10 headlines each for Programming, AI, Philippines, PH tech and startups, World, and Dota 2.
+**http://focus** is a short daily briefing for when Reddit is blocked: 10 headlines each for Programming, AI, Philippines, PH tech and startups, World, and Dota 2.
 
 - Sources: Hacker News and Lobsters, Simon Willison, The Verge and TechCrunch, Rappler, Inquirer, GMA News and Philstar, Google News (for PH tech and startups), BBC, Al Jazeera and The Guardian, and Steam's Dota 2 announcements.
 - Headlines link to the article, never to a comment thread. Links to blocked sites are left out.
@@ -230,7 +230,7 @@ The easy way is to run the installer again and give different answers. You can a
 | `weeklySummary` | `true` | Notification when a new week starts. |
 | `accountId` | from Steam | Your Dota account ID, used for the hero report and counter-picks. |
 
-The blocked and allowed sites are in `browsers/sites.json`. To change them, edit that file in a copy of this repo (`git clone https://github.com/ReidoBoss/focus-guard`) and run that copy's installer (`sudo bash install.sh`, or `.\install.ps1` as Administrator on Windows). Editing the copy in the install folder doesn't last, because every install replaces it. The **Blocked sites** tab at http://home/blocked shows the list in use.
+The blocked and allowed sites are in `browsers/sites.json`. To change them, edit that file in a copy of this repo (`git clone https://github.com/ReidoBoss/focus-guard`) and run that copy's installer (`sudo bash install.sh`, or `.\install.ps1` as Administrator on Windows). Editing the copy in the install folder doesn't last, because every install replaces it. The **Blocked sites** tab at http://focus/blocked shows the list in use.
 
 ## How it works
 

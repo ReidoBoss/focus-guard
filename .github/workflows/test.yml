@@ -58,7 +58,7 @@ jobs:
         run: |
           sudo bash ./install.sh --uninstall
           if curl -fs --max-time 3 http://127.0.0.1:43210/; then echo "service still running"; exit 1; fi
-          if grep -qE " (home|dota-limiter-stats)$" /etc/hosts; then echo "hosts entry still there"; exit 1; fi
+          if grep -qE " (focus|home|dota-limiter-stats)$" /etc/hosts; then echo "hosts entry still there"; exit 1; fi
 
       - name: Uninstall (Windows)
         if: runner.os == 'Windows'
@@ -66,7 +66,7 @@ jobs:
         run: |
           & ./install.ps1 -Uninstall
           if (Test-Path "$env:ProgramFiles\FocusGuard") { throw "install folder still there" }
-          if (Select-String -Path "$env:windir\System32\drivers\etc\hosts" -Pattern " (home|dota-limiter-stats)$" -Quiet) { throw "hosts entry still there" }
+          if (Select-String -Path "$env:windir\System32\drivers\etc\hosts" -Pattern " (focus|home|dota-limiter-stats)$" -Quiet) { throw "hosts entry still there" }
 
       - name: What owns port 80 (Windows)
         if: always() && runner.os == 'Windows'

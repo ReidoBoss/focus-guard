@@ -18,7 +18,7 @@ const HISTORY_FILE = path.join(DIR, "history.json");
 const LOG_FILE = path.join(DIR, "log.txt");
 // The site's tabs. topbar.js draws the bar that links them.
 const PAGES = { "/": "news.html", "/videos": "videos.html", "/dota": "stats.html", "/blocked": "blocked.html", "/settings": "settings.html" };
-const STATS_HOST = "home";
+const STATS_HOST = "focus";
 // Port 80 gives the page a clean address. If something else owns it (IIS, for
 // example), the page falls back to this port and the address includes it.
 const STATS_FALLBACK_PORT = CONFIG.statsFallbackPort || 8787;
@@ -673,7 +673,7 @@ function settings() {
   };
 }
 
-// The site, reached through the hosts entry "home": news at /, Dota stats at /dota.
+// The site, reached through the hosts entry "focus": news at /, Dota stats at /dota.
 const statsServer = http.createServer((req, res) => {
     const url = req.url.split("?")[0];
     res.setHeader("cache-control", "no-store");

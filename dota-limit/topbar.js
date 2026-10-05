@@ -1,4 +1,4 @@
-// Runs in the browser, not in Node: the tab bar at the top of every page on http://home.
+// Runs in the browser, not in Node: the tab bar at the top of every page on http://focus.
 // Each page loads it with <script src="/topbar.js" defer></script> in its <head>.
 (function () {
   const TABS = [

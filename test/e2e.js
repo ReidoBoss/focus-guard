@@ -39,7 +39,7 @@ function request(url, body) {
     req.end(body ? JSON.stringify(body) : undefined);
   });
 }
-let statsUrl = "http://home/";
+let statsUrl = "http://focus/";
 const api = async () => JSON.parse((await request(`${statsUrl}api`)).body);
 const notices = async () => JSON.parse((await request("http://127.0.0.1:43210/notices?after=0")).body);
 
@@ -181,7 +181,7 @@ const gsi = (matchid, game_state, win_team) => ({
     statsUrl = r.headers.location;
     return r.status === 302;
   }, 30);
-  check(`site uses the home address (${statsUrl})`, /^http:\/\/home(:\d+)?\/$/.test(statsUrl));
+  check(`site uses the focus address (${statsUrl})`, /^http:\/\/focus(:\d+)?\/$/.test(statsUrl));
   await waitFor("stats page answers", async () => (await request(`${statsUrl}dota`)).body.includes("Dota Limiter"), 30);
   // Only the page itself: /api/news would fetch real feeds from CI.
   check("news page answers", (await request(statsUrl)).body.includes("<title>News</title>"));

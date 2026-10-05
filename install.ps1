@@ -14,8 +14,9 @@ $Repo = "ReidoBoss/focus-guard"
 $Dest = Join-Path $env:ProgramFiles "FocusGuard"
 $Task = "FocusGuard"
 $NotifierTask = "FocusGuardNotifier"
-$StatsHost = "home"
-$OldStatsHost = "dota-limiter-stats" # the address before 2026-10, removed on install
+$StatsHost = "focus"
+# Earlier addresses, removed on install. Only the exact lines Focus Guard wrote.
+$OldHostsLines = @("127.0.0.1 dota-limiter-stats", "127.0.0.1 home")
 $Hosts = Join-Path $env:windir "System32\drivers\etc\hosts"
 
 $AllBrowsers = @("brave", "chrome", "edge", "firefox")
@@ -114,7 +115,7 @@ function Stop-FocusGuard {
 }
 
 function Remove-HostsEntry {
-    $lines = Get-Content $Hosts | Where-Object { $_ -notmatch " $StatsHost$" -and $_ -notmatch " $OldStatsHost$" }
+    $lines = Get-Content $Hosts | Where-Object { $_ -notmatch " $StatsHost$" -and $OldHostsLines -notcontains $_.Trim() }
     Set-Content -Path $Hosts -Value $lines -Encoding ASCII
 }
 

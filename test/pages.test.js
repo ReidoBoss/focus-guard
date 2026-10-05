@@ -1,4 +1,4 @@
-// Offline test for the tabs on http://home: the tab bar, Blocked sites and Settings,
+// Offline test for the tabs on http://focus: the tab bar, Blocked sites and Settings,
 // rendered in a fake DOM against canned /api/settings answers.
 // Run: node test/pages.test.js
 const fs = require("fs");

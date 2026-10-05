@@ -11,8 +11,8 @@ set -euo pipefail
 REPO="ReidoBoss/focus-guard"
 OS="$(uname -s)"
 LABEL="local.focusguard"
-STATS_HOST="home"
-OLD_STATS_HOST="dota-limiter-stats" # the address before 2026-10, removed on install
+STATS_HOST="focus"
+# Earlier addresses, removed on install. Only the exact lines Focus Guard wrote.
 
 YES=0
 UNINSTALL=0
@@ -159,7 +159,7 @@ stop_service() {
 
 remove_hosts_entry() {
   local tmp; tmp="$(mktemp)"
-  grep -v -e " $STATS_HOST\$" -e " $OLD_STATS_HOST\$" /etc/hosts > "$tmp" || true
+  grep -v -e " $STATS_HOST\$" -e "^127\.0\.0\.1 dota-limiter-stats\$" -e "^127\.0\.0\.1 home\$" /etc/hosts > "$tmp" || true
   cat "$tmp" > /etc/hosts && rm -f "$tmp"
 }
 

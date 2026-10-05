@@ -1,4 +1,4 @@
-// YouTube search for the Videos tab (http://home/videos): search only, with no home feed,
+// YouTube search for the Videos tab (http://focus/videos): search only, with no home feed,
 // Shorts, recommendations or comments. youtube.com stays blocked in the browsers; the
 // service runs the search here, and the page plays a video through the privacy-mode embed
 // player (youtube-nocookie.com/embed, an exception in browsers/sites.json).
