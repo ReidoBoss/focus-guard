@@ -14,7 +14,8 @@ $Repo = "ReidoBoss/focus-guard"
 $Dest = Join-Path $env:ProgramFiles "FocusGuard"
 $Task = "FocusGuard"
 $NotifierTask = "FocusGuardNotifier"
-$StatsHost = "dota-limiter-stats"
+$StatsHost = "home"
+$OldStatsHost = "dota-limiter-stats" # the address before 2026-10, removed on install
 $Hosts = Join-Path $env:windir "System32\drivers\etc\hosts"
 
 $AllBrowsers = @("brave", "chrome", "edge", "firefox")
@@ -113,7 +114,7 @@ function Stop-FocusGuard {
 }
 
 function Remove-HostsEntry {
-    $lines = Get-Content $Hosts | Where-Object { $_ -notmatch " $StatsHost$" }
+    $lines = Get-Content $Hosts | Where-Object { $_ -notmatch " $StatsHost$" -and $_ -notmatch " $OldStatsHost$" }
     Set-Content -Path $Hosts -Value $lines -Encoding ASCII
 }
 
@@ -446,9 +447,8 @@ Register-ScheduledTask -TaskName $NotifierTask -Force `
     -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)) | Out-Null
 try { Start-ScheduledTask -TaskName $NotifierTask } catch { Warn "Notifications start after your next sign-in." }
 
-if (-not (Select-String -Path $Hosts -Pattern " $StatsHost$" -Quiet)) {
-    Add-Content -Path $Hosts -Value "`r`n127.0.0.1 $StatsHost" -Encoding ASCII
-}
+Remove-HostsEntry
+Add-Content -Path $Hosts -Value "127.0.0.1 $StatsHost" -Encoding ASCII
 ipconfig /flushdns | Out-Null
 
 # ---------------------------------------------------------------- browsers
@@ -481,7 +481,8 @@ for ($i = 0; $i -lt 20 -and -not $ok; $i++) {
 if ($ok) { Say "Focus Guard is running" } else { Warn "The service didn't answer yet. Check $Dest\dota-limit\log.txt" }
 
 Write-Host ""
-if ($DotaEnabled) { Write-Host "  Stats page:  $StatsUrl" }
+Write-Host "  News:        $StatsUrl"
+if ($DotaEnabled) { Write-Host "  Dota stats:  $($StatsUrl)dota" }
 if ($Browsers | Where-Object { $_ -ne "firefox" }) {
     Write-Host @"
 

@@ -2,7 +2,7 @@
 
 Self-control tools installed with one command on macOS, Ubuntu and Windows:
 
-- **Dota Limit** (`dota-limit/`): counts Dota 2 matches through Game State Integration (GSI) and closes Steam for the rest of the day once the day's series is decided. Serves a stats page at `http://dota-limiter-stats`.
+- **Dota Limit** (`dota-limit/`): counts Dota 2 matches through Game State Integration (GSI) and closes Steam for the rest of the day once the day's series is decided. Serves a stats page at `http://home/dota`.
 - **Website blocker** (`browsers/`): blocks the sites in `browsers/sites.json` through browser policies, plus a Chromium extension for Facebook's single-page navigation. Can block Safari outright on macOS.
 - **Adult website block** (`browsers/dns.js`, optional, `blockAdult`): sets the system DNS to Cloudflare for Families and adds SafeSearch and "secure DNS off" policies to every browser.
 
@@ -19,9 +19,9 @@ Self-control tools installed with one command on macOS, Ubuntu and Windows:
 | `dota-limit/vdf.js` | Valve KeyValues parser/writer. |
 | `dota-limit/gsi.js` | The GSI config file, shared by `setup.js` and `daemon.js`. |
 | `dota-limit/notifier.js` | Windows only. Polls `/notices` and shows toasts in the user's session. |
-| `dota-limit/stats.html` | Stats page, served by the daemon. Polls `/api`. Also renders the teammates and enemies panel and decides its labels (`chips()`). |
+| `dota-limit/stats.html` | Stats page at `/dota`, served by the daemon. Polls `/api`. Also renders the teammates and enemies panel and decides its labels (`chips()`). |
 | `dota-limit/insights.js` | Hero report, tilt check, lane results, gold swing, counter-picks and weekly summary. Pure functions with no network or file access; the daemon feeds them data. |
-| `dota-limit/news.js` | Headlines for `/news` (`news.html`): 10 per section from RSS feeds, Hacker News, Lobsters and Steam. Fetched only when the page is opened, at most every 3 hours, cached in `news-cache.json`. Drops links to sites in `browsers/sites.json`. |
+| `dota-limit/news.js` | Headlines for the front page, `http://home/` (`news.html`): 10 per section from RSS feeds, Hacker News, Lobsters and Steam. Fetched only when the page is opened, at most every 3 hours, cached in `news-cache.json`. Drops links to sites in `browsers/sites.json`. |
 | `dota-limit/opendota.js` | After a match, fetches the scoreboard and each public player's profile from OpenDota. Requests go out one at a time, about 1.1 s apart, because the free tier allows 60 a minute. |
 | `browsers/sites.json` | Blocked and allowed sites. The only list; every browser format is generated from it. |
 | `browsers/policies.js` | Generates Chromium policy JSON, Firefox policies, and the macOS `.mobileconfig`. Takes a site-list flag and an adult flag per browser. |

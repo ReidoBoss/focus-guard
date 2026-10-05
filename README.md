@@ -4,7 +4,7 @@
 
 Self-control tools for people who want to get better at life:
 
-- **Dota Limit**: one best-of-3 Dota 2 series per day. When the series is decided (2-0, 0-2, or after game 3), Steam is closed and stays closed until 4 AM. Saturday and Sunday can have their own limit, like 7 games. Comes with a stats page at **http://dota-limiter-stats**.
+- **Dota Limit**: one best-of-3 Dota 2 series per day. When the series is decided (2-0, 0-2, or after game 3), Steam is closed and stays closed until 4 AM. Saturday and Sunday can have their own limit, like 7 games. Comes with a stats page at **http://home/dota**.
 - **Website blocker**: blocks Facebook, YouTube and Reddit, except **facebook.com/messages**, in Brave, Chrome, Edge, Firefox and Chromium. On macOS it can also stop Safari from opening.
 - **Adult website block** (optional): blocks porn and other adult sites in every browser and app, and turns on SafeSearch.
 
@@ -64,7 +64,7 @@ Running the installer again is how you change settings. Your last answers become
 1. Installs Node.js if you don't have it (apt on Ubuntu, winget on Windows).
 2. Closes Steam (it asks first), finds Dota 2 in any of your Steam libraries, and adds the `-gamestateintegration` launch option for you.
 3. Starts a background service that runs on every boot (launchd, systemd, or a Windows scheduled task).
-4. Adds `dota-limiter-stats` to your hosts file so the stats page has a real address.
+4. Adds `home` to your hosts file so the news and stats pages have a real address.
 5. Applies the block list to the browsers you picked, as browser policies.
 6. If you chose to block adult websites, switches this computer's DNS to the family filter and adds the SafeSearch policies (see below).
 
@@ -111,7 +111,7 @@ On macOS there's one more click, also needed for the adult website block: the in
 
 ## Stats page
 
-Open **http://dota-limiter-stats** (type the `http://` so Brave doesn't search for it).
+Open **http://home/dota** (type the `http://` so your browser doesn't search for it).
 
 - Today's series score and whether Steam is locked
 - Every match: hero, win or loss, K/D/A, last hits and denies, GPM, XPM, net worth, items, game length and score, plus OpenDota, Dotabuff and STRATZ links
@@ -124,7 +124,7 @@ The links at the top of the page jump to each section.
 
 ### News
 
-**http://dota-limiter-stats/news** (or the **News** link on the stats page) is a short daily briefing for when Reddit is blocked: 10 headlines each for Programming, AI, Philippines, PH tech and startups, World, and Dota 2.
+**http://home** (or the **News** link on the stats page) is a short daily briefing for when Reddit is blocked: 10 headlines each for Programming, AI, Philippines, PH tech and startups, World, and Dota 2.
 
 - Sources: Hacker News and Lobsters, Simon Willison, The Verge and TechCrunch, Rappler, Inquirer, GMA News and Philstar, Google News (for PH tech and startups), BBC, Al Jazeera and The Guardian, and Steam's Dota 2 announcements.
 - Headlines link to the article, never to a comment thread. Links to blocked sites are left out.

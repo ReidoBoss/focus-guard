@@ -17,7 +17,7 @@ const HISTORY_FILE = path.join(DIR, "history.json");
 const LOG_FILE = path.join(DIR, "log.txt");
 const STATS_PAGE = path.join(DIR, "stats.html");
 const NEWS_PAGE = path.join(DIR, "news.html");
-const STATS_HOST = "dota-limiter-stats";
+const STATS_HOST = "home";
 // Port 80 gives the page a clean address. If something else owns it (IIS, for
 // example), the page falls back to this port and the address includes it.
 const STATS_FALLBACK_PORT = CONFIG.statsFallbackPort || 8787;
@@ -618,7 +618,7 @@ function maybeWeeklyNotice() {
   if (!w.games) return;
   const best = w.best ? ` Best hero: ${label(w.best.hero)}.` : "";
   const stopped = w.limitDays ? ` The limit stopped you on ${w.limitDays} day${w.limitDays === 1 ? "" : "s"}.` : "";
-  notify("Weekly summary", `Last week: ${w.wins}-${w.losses}.${best}${stopped} Details at ${statsUrl}#weekly`);
+  notify("Weekly summary", `Last week: ${w.wins}-${w.losses}.${best}${stopped} Details at ${statsUrl}dota#weekly`);
 }
 
 function status() {
@@ -648,7 +648,7 @@ function blockedSites() {
 }
 const news = createNews({ dir: DIR, blocked: blockedSites(), log });
 
-// Stats site, reached through the hosts entry "dota-limiter-stats".
+// The site, reached through the hosts entry "home": news at /, Dota stats at /dota.
 const statsServer = http.createServer((req, res) => {
     const url = req.url.split("?")[0];
     res.setHeader("cache-control", "no-store");
@@ -702,12 +702,16 @@ const statsServer = http.createServer((req, res) => {
       })().catch((e) => json({ hero, status: "error", error: e.message }));
       return;
     }
-    if (req.headers.host && !req.headers.host.startsWith(STATS_HOST)) {
+    if (req.headers.host && req.headers.host.split(":")[0] !== STATS_HOST) {
       res.writeHead(302, { location: statsUrl });
       return res.end();
     }
+    if (url !== "/" && url !== "/dota") {
+      res.writeHead(302, { location: "/" });
+      return res.end();
+    }
     res.setHeader("content-type", "text/html; charset=utf-8");
-    fs.createReadStream(url === "/news" ? NEWS_PAGE : STATS_PAGE).pipe(res);
+    fs.createReadStream(url === "/dota" ? STATS_PAGE : NEWS_PAGE).pipe(res);
   });
 
 function listenStats(port) {

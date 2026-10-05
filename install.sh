@@ -11,7 +11,8 @@ set -euo pipefail
 REPO="ReidoBoss/focus-guard"
 OS="$(uname -s)"
 LABEL="local.focusguard"
-STATS_HOST="dota-limiter-stats"
+STATS_HOST="home"
+OLD_STATS_HOST="dota-limiter-stats" # the address before 2026-10, removed on install
 
 YES=0
 UNINSTALL=0
@@ -158,7 +159,7 @@ stop_service() {
 
 remove_hosts_entry() {
   local tmp; tmp="$(mktemp)"
-  grep -v " $STATS_HOST\$" /etc/hosts > "$tmp" || true
+  grep -v -e " $STATS_HOST\$" -e " $OLD_STATS_HOST\$" /etc/hosts > "$tmp" || true
   cat "$tmp" > /etc/hosts && rm -f "$tmp"
 }
 
@@ -488,7 +489,8 @@ EOF
   systemctl enable --now focus-guard >/dev/null 2>&1
 fi
 
-grep -q " $STATS_HOST\$" /etc/hosts || echo "127.0.0.1 $STATS_HOST" >> /etc/hosts
+remove_hosts_entry
+echo "127.0.0.1 $STATS_HOST" >> /etc/hosts
 if [ "$OS" = Darwin ]; then dscacheutil -flushcache; killall -HUP mDNSResponder 2>/dev/null || true; fi
 
 # ---------------------------------------------------------------- browsers
@@ -550,7 +552,8 @@ else
 fi
 
 echo ""
-if [ "$DOTA_ENABLED" = true ]; then echo "  Stats page:  $STATS_URL"; fi
+echo "  News:        $STATS_URL"
+if [ "$DOTA_ENABLED" = true ]; then echo "  Dota stats:  ${STATS_URL}dota"; fi
 if [[ ",$BROWSERS," == *,brave,* || ",$BROWSERS," == *,chrome,* || ",$BROWSERS," == *,chromium,* || ",$BROWSERS," == *,edge,* ]]; then
   cat <<EOF
 
