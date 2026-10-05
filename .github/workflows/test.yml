@@ -23,6 +23,7 @@ jobs:
           node test/news.test.js
           node test/pages.test.js
           node test/videos.test.js
+          node test/install.test.js
 
       - name: Create a fake Steam + Dota 2 install
         run: node test/fake-steam.js

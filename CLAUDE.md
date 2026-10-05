@@ -30,7 +30,7 @@ Self-control tools installed with one command on macOS, Ubuntu and Windows:
 | `browsers/policies.js` | Generates Chromium policy JSON, Firefox policies, and the macOS `.mobileconfig`. Takes a site-list flag and an adult flag per browser. |
 | `browsers/dns.js` | Turns the family DNS filter on or off. Run by the installers, and every minute by the daemon (as a child process) while `blockAdult` is on. |
 | `browsers/extension/` | MV3 extension for Brave, Chrome, Edge and Chromium. |
-| `test/` | `insights.test.js`, `opendota.test.js`, `news.test.js`, `pages.test.js` and `videos.test.js` (offline, safe to run anywhere) plus the CI-only `fake-steam.js`, `e2e.js` and `interactive.exp`. |
+| `test/` | `insights.test.js`, `opendota.test.js`, `news.test.js`, `pages.test.js`, `videos.test.js` and `install.test.js` (offline, safe to run anywhere) plus the CI-only `fake-steam.js`, `e2e.js` and `interactive.exp`. |
 
 Install locations: `/usr/local/focus-guard` (macOS), `/opt/focus-guard` (Linux), `C:\Program Files\FocusGuard` (Windows). Services: launchd `local.focusguard`, systemd `focus-guard`, scheduled tasks `FocusGuard` (SYSTEM) and `FocusGuardNotifier` (user).
 
@@ -46,7 +46,7 @@ Install locations: `/usr/local/focus-guard` (macOS), `/opt/focus-guard` (Linux),
 - **Old runtimes.** Code the installers run (`dota-limit/*.js`, `browsers/*.js`) must work on Node 12, because Ubuntu 22.04's apt `nodejs` is v12. Don't use `?.`, `??`, or newer APIs there. The `.html` pages, `topbar.js` and `extension/` run in browsers, so they're exempt.
 - **PowerShell 5.1.** `install.ps1` must run in Windows PowerShell 5.1: no ternaries, no `??`, and `else` / `elseif` on the same line as the closing `}`. Never pass JSON as a native-command argument, because 5.1 mangles the quotes. Use env vars, like `FG_DETECTED`.
 - **Questions on macOS and Linux** read from and write to `/dev/tty`, so they also work when the script is piped in. Every prompt helper must return its default immediately when `INTERACTIVE=0`, or a bad saved default loops forever.
-- **Never tell people to run `curl ... | sudo bash`.** sudo-rs, the default sudo on newer Ubuntu, runs a piped-in script in a terminal of its own and never passes it keystrokes, so the first question hangs (the read is stopped, state `T` in `ps`). `sudo bash -c "$(curl ...)"` keeps the keyboard on stdin, and options go after `--`. `install.sh` stops with that command when it's piped in under sudo-rs. The whole script travels as one argument, which Linux caps at 128 KB, so keep `install.sh` well under that.
+- **Never tell people to run `curl ... | sudo bash`.** sudo-rs, the default sudo on newer Ubuntu, runs a piped-in script in a terminal of its own and never passes it keystrokes, so the first question hangs (the read is stopped, state `T` in `ps`). `sudo bash -c "$(curl ...)"` keeps the keyboard on stdin, and options go after `--`. `install.sh` stops with that command when it's piped in under sudo-rs. The whole script travels as one argument, which Linux caps at 128 KB, so keep `install.sh` well under that. That argument is also on sudo's command line, so `pkill -f` and the daemon's `isDota()` / `isSteam()` / `isSafari()` must not match the script's own text (`[d]ota ...` in a `pkill -f` pattern); `test/install.test.js` checks this.
 - **Never run `pkill -f` on a broad Steam pattern.** macOS launchd respawns Steam's `ipcserver` every few seconds; killing it caused a notification loop. `isSteam()` targets only `steam_osx` / `Steam Helper.app`, `steam` / `steamwebhelper` on Linux, and `steam.exe` / `steamwebhelper.exe` on Windows.
 - **macOS privacy rules block the root daemon from external drives.** So on macOS the GSI file is written by `setup.js detect` as the user, and `ensureGsiConfig()` failing there is expected. Linux and Windows can restore the file from the daemon.
 - **Steam rewrites `localconfig.vdf` when it quits**, so Steam must be closed before launch options are patched. `vdf.js` must keep round-tripping Steam's files byte for byte. Check against a real `localconfig.vdf` after any parser change.
@@ -93,6 +93,7 @@ node test/opendota.test.js   # OpenDota lookups and the whole stats page, agains
 node test/news.test.js       # news feeds and the news page, against canned feeds
 node test/pages.test.js      # tab bar, Blocked sites and Settings tabs
 node test/videos.test.js     # YouTube search parsing and the Videos page, against a canned search page
+node test/install.test.js    # nothing that closes Steam or Dota by command line matches install.sh itself
 node browsers/dns.js status  # read-only; "on" and "off" change this machine's DNS
 for f in dota-limit/*.js browsers/*.js browsers/extension/*.js test/*.js; do node --check "$f" || echo "FAIL $f"; done
 bash -n install.sh

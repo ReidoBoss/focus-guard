@@ -433,7 +433,8 @@ if [ "$DOTA_ENABLED" = true ]; then
   fi
   if [ "$PATCH" = 1 ]; then
     pkill -9 -x steam_osx 2>/dev/null || true
-    pkill -9 -f "dota 2 beta/game/bin/" 2>/dev/null || true
+    # [d] so the pattern doesn't match this script, which is on sudo's command line (test/install.test.js).
+    pkill -9 -f "[d]ota 2 beta/game/bin/" 2>/dev/null || true
     pkill -9 -x steam 2>/dev/null || true
     pkill -9 -x steamwebhelper 2>/dev/null || true
     sleep 1
