@@ -185,7 +185,7 @@ const gsi = (matchid, game_state, win_team) => ({
   await waitFor("stats page answers", async () => (await request(`${statsUrl}dota`)).body.includes("Dota Limiter"), 30);
   // Only the page itself: /api/news would fetch real feeds from CI.
   check("news page answers", (await request(statsUrl)).body.includes("<title>News</title>"));
-  for (const tab of ["blocked", "settings", "topbar.js"]) check(`${tab} answers`, (await request(`${statsUrl}${tab}`)).status === 200);
+  for (const tab of ["videos", "blocked", "settings", "topbar.js"]) check(`${tab} answers`, (await request(`${statsUrl}${tab}`)).status === 200);
   const shown = JSON.parse((await request(`${statsUrl}api/settings`)).body);
   check("settings tab shows the installer answers", shown.config.mode === EXPECT.mode && shown.adult.on === EXPECT.adult && shown.sites.block.includes("reddit.com"));
 

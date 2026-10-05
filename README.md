@@ -5,7 +5,7 @@
 Self-control tools for people who want to get better at life:
 
 - **Dota Limit**: one best-of-3 Dota 2 series per day. When the series is decided (2-0, 0-2, or after game 3), Steam is closed and stays closed until 4 AM. Saturday and Sunday can have their own limit, like 7 games. Comes with a stats page at **http://home/dota**.
-- **Website blocker**: blocks Facebook, YouTube and Reddit, except **facebook.com/messages**, in Brave, Chrome, Edge, Firefox and Chromium. On macOS it can also stop Safari from opening.
+- **Website blocker**: blocks Facebook, YouTube and Reddit, except **facebook.com/messages** and YouTube's embedded player (for the Videos tab), in Brave, Chrome, Edge, Firefox and Chromium. On macOS it can also stop Safari from opening.
 - **Adult website block** (optional): blocks porn and other adult sites in every browser and app, and turns on SafeSearch.
 
 Works on **macOS**, **Ubuntu / Debian** and **Windows 10 / 11**.
@@ -124,7 +124,15 @@ The links at the top of the page jump to each section.
 
 ### The app at http://home
 
-Focus Guard's pages share one tab bar: **News**, **Dota** (the stats page), **Blocked sites** (what's blocked, in which browsers, and whether the adult website block is on) and **Settings** (your Dota limit and the installer command to change it). Blocked sites and Settings only show settings. Changing them still takes the installer and your password, so loosening a limit takes a moment to think about.
+Focus Guard's pages share one tab bar: **News**, **Videos**, **Dota** (the stats page), **Blocked sites** (what's blocked, in which browsers, and whether the adult website block is on) and **Settings** (your Dota limit and the installer command to change it). Blocked sites and Settings only show settings. Changing them still takes the installer and your password, so loosening a limit takes a moment to think about.
+
+### Videos
+
+**http://home/videos** searches YouTube while youtube.com itself stays blocked. You get a search box and a list of results, and nothing else: no home feed, no Shorts, no recommendations, no comments. Live streams and anything under 2 minutes are left out.
+
+- A video plays in YouTube's privacy-mode player (`youtube-nocookie.com/embed`), the one part of YouTube the blocker lets through. When it ends, YouTube only suggests videos from the same channel.
+- Some uploaders turn off playing on other sites. Those videos say they can't play here. Pick another result.
+- With the adult website block on, YouTube's Restricted Mode applies to the player too.
 
 ### News
 

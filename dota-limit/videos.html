@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Videos</title>
+<script src="/topbar.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #0d0f13; --panel: #151920; --panel-2: #1b2029; --line: #262c37; --text: #e8eaee; --muted: #8a93a3; --accent: #f5b642; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  form { display: flex; gap: 8px; margin-top: 20px; }
+  input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; outline: none; }
+  input:focus { border-color: var(--accent); }
+  button { font: 600 14px/1 Inter, system-ui, sans-serif; color: #0d0f13; background: var(--accent); border: 0; border-radius: 10px; padding: 0 18px; cursor: pointer; }
+  .results { margin-top: 20px; display: grid; gap: 4px; }
+  .video { display: grid; grid-template-columns: 196px 1fr; gap: 14px; padding: 10px; border-radius: 12px; color: inherit; text-decoration: none; }
+  .video:hover { background: var(--panel); }
+  .thumb { position: relative; width: 196px; aspect-ratio: 16 / 9; border-radius: 8px; background: var(--panel-2) center / cover; }
+  .len { position: absolute; right: 6px; bottom: 6px; font: 700 12px/1 "JetBrains Mono", monospace; background: rgba(0, 0, 0, 0.8); padding: 3px 5px; border-radius: 4px; }
+  .title { font-weight: 600; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .player { margin-top: 20px; position: relative; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: #000; }
+  .player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .back { display: inline-block; margin-top: 20px; color: var(--muted); text-decoration: none; font-size: 14px; }
+  .back:hover { color: var(--text); }
+  .watch-title { font-size: 18px; font-weight: 700; margin-top: 14px; overflow-wrap: anywhere; }
+  .empty { color: var(--muted); padding: 24px 0; }
+  @media (max-width: 600px) { .video { grid-template-columns: 128px 1fr; gap: 10px; } .thumb { width: 128px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Videos</h1>
+  <div class="note">Search YouTube for what you need. No home feed, no Shorts, no recommendations.</div>
+  <form id="form" action="/videos">
+    <input id="q" name="q" type="search" placeholder="What do you want to learn? Like: rust tutorial" autocomplete="off" required>
+    <button>Search</button>
+  </form>
+  <div id="main"></div>
+</div>
+<script>
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const params = new URLSearchParams(location.search);
+  const q = (params.get("q") || "").trim();
+  const v = params.get("v") || "";
+  const main = document.getElementById("main");
+  document.getElementById("q").value = q;
+
+  async function search(query) {
+    const r = await (await fetch(`/api/videos?q=${encodeURIComponent(query)}`, { cache: "no-store" })).json();
+    if (r.error) throw new Error(r.error);
+    return r.videos;
+  }
+
+  function list(videos) {
+    if (!videos.length) return `<div class="empty">Nothing found. Try other words, like adding "tutorial" or "guide".</div>`;
+    return `<div class="results">${videos.map((x) => `
+      <a class="video" href="/videos?v=${encodeURIComponent(x.id)}&q=${encodeURIComponent(q)}">
+        <div class="thumb" style="background-image:url('${esc(x.thumb)}')"><span class="len">${esc(x.length)}</span></div>
+        <div><div class="title">${esc(x.title)}</div>
+        <div class="meta">${esc(x.channel)}</div>
+        <div class="meta">${[x.views, x.published].filter(Boolean).map(esc).join(" · ")}</div></div>
+      </a>`).join("")}</div>`;
+  }
+
+  // One video and nothing next to it. rel=0 keeps the end screen to the same channel.
+  function watch() {
+    const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v)}?rel=0&modestbranding=1&iv_load_policy=3&playsinline=1`;
+    return `
+      <a class="back" href="/videos?q=${encodeURIComponent(q)}">${q ? `Back to results for "${esc(q)}"` : "New search"}</a>
+      <div class="player"><iframe src="${src}" title="Video player" referrerpolicy="strict-origin-when-cross-origin"
+        allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>
+      <div id="info"></div>
+      <div class="note">If the player says the video can't play here, the uploader turned off playing on other sites. Pick another result.</div>`;
+  }
+
+  (async () => {
+    if (/^[\w-]{11}$/.test(v)) {
+      main.innerHTML = watch();
+      // The title comes from the (cached) search, so the player isn't loaded twice.
+      if (q) {
+        try {
+          const found = (await search(q)).filter((x) => x.id === v)[0];
+          if (found) document.getElementById("info").innerHTML = `<div class="watch-title">${esc(found.title)}</div><div class="meta">${esc(found.channel)} · ${esc(found.length)}</div>`;
+        } catch (e) {}
+      }
+      return;
+    }
+    if (!q) {
+      document.getElementById("q").focus();
+      return;
+    }
+    main.innerHTML = `<div class="empty">Searching...</div>`;
+    try {
+      main.innerHTML = list(await search(q));
+    } catch (e) {
+      main.innerHTML = `<div class="empty">Couldn't search YouTube right now (${esc(e.message)}). Try again in a minute.</div>`;
+    }
+  })();
+</script>
+</body>
+</html>

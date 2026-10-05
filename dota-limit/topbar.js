@@ -3,6 +3,7 @@
 (function () {
   const TABS = [
     ["/", "News"],
+    ["/videos", "Videos"],
     ["/dota", "Dota"],
     ["/blocked", "Blocked sites"],
     ["/settings", "Settings"],
@@ -18,7 +19,7 @@
     .topbar-tabs a { font: 500 14px/1 Inter, system-ui, sans-serif; color: #8a93a3; text-decoration: none; padding: 9px 12px; border-radius: 8px; white-space: nowrap; }
     .topbar-tabs a:hover { color: #e8eaee; background: #151920; }
     .topbar-tabs a.on { color: #e8eaee; background: #1b2029; }
-    @media (max-width: 600px) { .topbar-brand { display: none; } .topbar-in { gap: 0; } }
+    @media (max-width: 600px) { .topbar-brand { display: none; } .topbar-in { gap: 0; padding: 0 8px; } .topbar-tabs a { padding: 9px 9px; } }
   `;
   document.head.appendChild(style);
   const here = location.pathname.replace(/\/+$/, "") || "/";

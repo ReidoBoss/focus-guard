@@ -42,7 +42,7 @@
     const browsers = s.browsers.map((b) => NAMES[b] || b);
     const allow = s.sites.allow.length
       ? `<h2>Still allowed</h2><div class="card"><div class="sites">${s.sites.allow.map((a) => `<span class="site allow">${esc(a)}</span>`).join("")}</div>
-         <div class="note">Parts of blocked sites you can still open, like Messenger on facebook.com.</div></div>` : "";
+         <div class="note">Parts of blocked sites you can still open: Messenger on facebook.com, and the YouTube player the Videos tab uses (one video at a time, with no feed or recommendations).</div></div>` : "";
     let adult = row("Adult websites", "Family DNS filter on every connection, plus SafeSearch in every browser.", s.adult.on ? "On" : "Off", s.adult.on ? "on" : "off");
     if (s.adult.on && s.adult.problem) adult += row("Last DNS check had a problem", esc(s.adult.problem), "Check", "warn");
     document.getElementById("body").innerHTML = `

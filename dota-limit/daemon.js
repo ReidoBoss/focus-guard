@@ -9,6 +9,7 @@ const { gsiPath, gsiConfig } = require("./gsi");
 const { createOpenDota, accountIdFromSteamId, RETRY_MINUTES } = require("./opendota");
 const insights = require("./insights");
 const { createNews } = require("./news");
+const { createVideos } = require("./videos");
 
 const DIR = __dirname;
 const CONFIG = JSON.parse(fs.readFileSync(path.join(DIR, "config.json"), "utf8"));
@@ -16,7 +17,7 @@ const STATE_FILE = path.join(DIR, "state.json");
 const HISTORY_FILE = path.join(DIR, "history.json");
 const LOG_FILE = path.join(DIR, "log.txt");
 // The site's tabs. topbar.js draws the bar that links them.
-const PAGES = { "/": "news.html", "/dota": "stats.html", "/blocked": "blocked.html", "/settings": "settings.html" };
+const PAGES = { "/": "news.html", "/videos": "videos.html", "/dota": "stats.html", "/blocked": "blocked.html", "/settings": "settings.html" };
 const STATS_HOST = "home";
 // Port 80 gives the page a clean address. If something else owns it (IIS, for
 // example), the page falls back to this port and the address includes it.
@@ -649,6 +650,7 @@ const SITES = readJson(path.join(DIR, "..", "browsers", "sites.json"), { block: 
 
 // Headlines for the front page. Links to sites the website blocker blocks are left out.
 const news = createNews({ dir: DIR, blocked: SITES.block || [], log });
+const videos = createVideos();
 
 // What the Blocked sites and Settings tabs show: the settings the service is running with.
 // Read-only on purpose. Loosening a limit should take the installer and an admin password,
@@ -713,6 +715,14 @@ const statsServer = http.createServer((req, res) => {
     if (url === "/topbar.js") {
       res.setHeader("content-type", "text/javascript; charset=utf-8");
       return fs.createReadStream(path.join(DIR, "topbar.js")).pipe(res);
+    }
+    if (url === "/api/videos") {
+      const q = new URL(req.url, "http://x").searchParams.get("q");
+      videos.search(q).then(json, (e) => {
+        log(`video search failed: ${e.message}`);
+        json({ error: e.message, videos: [] });
+      });
+      return;
     }
     if (url === "/api/news") {
       news.get().then(json, (e) => json({ error: e.message, sections: [] }));

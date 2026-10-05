@@ -19,17 +19,18 @@ Self-control tools installed with one command on macOS, Ubuntu and Windows:
 | `dota-limit/vdf.js` | Valve KeyValues parser/writer. |
 | `dota-limit/gsi.js` | The GSI config file, shared by `setup.js` and `daemon.js`. |
 | `dota-limit/notifier.js` | Windows only. Polls `/notices` and shows toasts in the user's session. |
-| `dota-limit/topbar.js` | Runs in the browser. The tab bar (News, Dota, Blocked sites, Settings) on every page of `http://home`. The routes are `PAGES` in `daemon.js`. |
+| `dota-limit/topbar.js` | Runs in the browser. The tab bar (News, Videos, Dota, Blocked sites, Settings) on every page of `http://home`. The routes are `PAGES` in `daemon.js`. |
 | `dota-limit/blocked.html`, `settings.html` | The Blocked sites and Settings tabs. Read-only, from `/api/settings`: loosening a limit must take the installer, and any website can send requests to 127.0.0.1. |
 | `dota-limit/stats.html` | Stats page at `/dota`, served by the daemon. Polls `/api`. Also renders the teammates and enemies panel and decides its labels (`chips()`). |
 | `dota-limit/insights.js` | Hero report, tilt check, lane results, gold swing, counter-picks and weekly summary. Pure functions with no network or file access; the daemon feeds them data. |
 | `dota-limit/news.js` | Headlines for the front page, `http://home/` (`news.html`): 10 per section from RSS feeds, Hacker News, Lobsters and Steam. Fetched only when the page is opened, at most every 3 hours, cached in `news-cache.json`. Drops links to sites in `browsers/sites.json`. |
+| `dota-limit/videos.js` | YouTube search for `/videos` (`videos.html`). Reads `ytInitialData` from YouTube's own search page (the Data API needs a key), videos only, without Shorts, live streams or anything under 2 minutes. The page plays through `youtube-nocookie.com/embed`, an `allow` entry in `sites.json`; youtube.com stays blocked. |
 | `dota-limit/opendota.js` | After a match, fetches the scoreboard and each public player's profile from OpenDota. Requests go out one at a time, about 1.1 s apart, because the free tier allows 60 a minute. |
 | `browsers/sites.json` | Blocked and allowed sites. The only list; every browser format is generated from it. |
 | `browsers/policies.js` | Generates Chromium policy JSON, Firefox policies, and the macOS `.mobileconfig`. Takes a site-list flag and an adult flag per browser. |
 | `browsers/dns.js` | Turns the family DNS filter on or off. Run by the installers, and every minute by the daemon (as a child process) while `blockAdult` is on. |
 | `browsers/extension/` | MV3 extension for Brave, Chrome, Edge and Chromium. |
-| `test/` | `insights.test.js`, `opendota.test.js`, `news.test.js` and `pages.test.js` (offline, safe to run anywhere) plus the CI-only `fake-steam.js`, `e2e.js` and `interactive.exp`. |
+| `test/` | `insights.test.js`, `opendota.test.js`, `news.test.js`, `pages.test.js` and `videos.test.js` (offline, safe to run anywhere) plus the CI-only `fake-steam.js`, `e2e.js` and `interactive.exp`. |
 
 Install locations: `/usr/local/focus-guard` (macOS), `/opt/focus-guard` (Linux), `C:\Program Files\FocusGuard` (Windows). Services: launchd `local.focusguard`, systemd `focus-guard`, scheduled tasks `FocusGuard` (SYSTEM) and `FocusGuardNotifier` (user).
 
@@ -90,6 +91,7 @@ node test/insights.test.js   # hero report, tilt check, lanes, counters, weekly 
 node test/opendota.test.js   # OpenDota lookups and the whole stats page, against canned answers
 node test/news.test.js       # news feeds and the news page, against canned feeds
 node test/pages.test.js      # tab bar, Blocked sites and Settings tabs
+node test/videos.test.js     # YouTube search parsing and the Videos page, against a canned search page
 node browsers/dns.js status  # read-only; "on" and "off" change this machine's DNS
 for f in dota-limit/*.js browsers/*.js browsers/extension/*.js test/*.js; do node --check "$f" || echo "FAIL $f"; done
 bash -n install.sh
