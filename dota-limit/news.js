@@ -1,13 +1,16 @@
-// Headlines for the news page (/news): 10 per section, pulled from public RSS feeds and APIs.
-// Built to be read once, not scrolled: no comments, no scores, and the feeds refresh at most
+// Stories for the scrolling news feed, pulled from public RSS feeds and APIs.
+// Includes feed images and on-demand source comments. Feeds refresh at most
 // every 3 hours, so reloading the page doesn't show anything new.
 const https = require("https");
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const PER_SECTION = 10;
+const PER_SECTION = 60;
 const REFRESH_MS = 3 * 3600 * 1000;
+const CACHE_VERSION = 3;
+const COMMENTS_MS = 10 * 60 * 1000;
+const MAX_COMMENTS = 200;
 const UA = "focus-guard (github.com/ReidoBoss/focus-guard)";
 
 const AI_WORDS = /\b(ai|a\.i\.|agi|artificial intelligence|apple intelligence|superintelligence|llms?|gpts?|gpt-\w+|chatgpt|openai|anthropic|claude|gemini|llama|mistral|deepseek|qwen|copilot|machine learning|neural|agentic|chatbots?|diffusion|hugging ?face|nvidia)\b/i;
@@ -82,7 +85,7 @@ const SECTIONS = [
     id: "dota",
     title: "Dota 2",
     sources: [
-      { id: "steam-dota", name: "Steam", url: "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=570&count=15&feeds=steam_community_announcements", kind: "steam" },
+      { id: "steam-dota", name: "Steam", url: "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=570&count=60&feeds=steam_community_announcements", kind: "steam" },
     ],
   },
 ];
@@ -145,6 +148,116 @@ function time(s) {
   return isNaN(t) ? null : t;
 }
 
+// Resolve feed-relative images and links, allowing only ordinary web URLs.
+function webUrl(value, base) {
+  if (!value || typeof value !== "string") return null;
+  try {
+    const u = new URL(value.trim(), base);
+    return /^https?:$/.test(u.protocol) && !u.username && !u.password ? u.href : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function commentCount(value) {
+  if (value == null || !/^\d+$/.test(String(value))) return null;
+  const n = Number(value);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+function excerpt(value) {
+  const s = text(value).replace(/\[\/?[^\]]+\]/g, "");
+  return s.length > 280 ? s.slice(0, 277).trim() + "..." : s;
+}
+
+// Only these two sources expose public comment threads we can display here.
+function discussionKey(value) {
+  const safe = webUrl(value);
+  if (!safe) return null;
+  const u = new URL(safe);
+  if (u.hostname === "news.ycombinator.com" && u.pathname === "/item") {
+    const id = u.searchParams.get("id");
+    return /^\d{1,16}$/.test(id || "") ? "hn:" + id : null;
+  }
+  const m = u.pathname.match(/^\/s\/([a-z0-9]{1,10})(?:\/|$)/);
+  return u.hostname === "lobste.rs" && m ? "lobsters:" + m[1] : null;
+}
+
+function commentText(html) {
+  // Strip real markup before decoding, so escaped code such as a &lt; b survives.
+  const plain = String(html || "")
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<\/?(?:p|div|pre|blockquote)\b[^>]*>|<br\s*\/?\s*>/gi, "\n\n")
+    .replace(/<[^>]*>/g, "");
+  return decode(plain).replace(/[ \t]+\n/g, "\n").replace(/\n[ \t]*\n(?:[ \t]*\n)*/g, "\n\n").trim();
+}
+
+function parseComments(kind, body) {
+  const data = JSON.parse(body);
+  const comments = [];
+  let truncated = false;
+  if (kind === "hn") {
+    if (!data || !Array.isArray(data.children)) throw new Error("no comment thread");
+    const stack = data.children.slice().reverse().map((c) => ({ c, depth: 0 }));
+    while (stack.length && comments.length < MAX_COMMENTS) {
+      const entry = stack.pop();
+      const c = entry.c;
+      if (!c || typeof c !== "object") continue;
+      const children = Array.isArray(c.children) ? c.children : [];
+      const bodyText = c.deleted || c.dead ? "" : commentText(c.text);
+      if (bodyText || children.length) {
+        const id = /^\d+$/.test(String(c.id)) ? String(c.id) : "";
+        comments.push({
+          id, author: bodyText ? String(c.author || "Unknown") : "[deleted]", text: bodyText.slice(0, 20000) || "Comment unavailable.",
+          time: c.created_at_i ? c.created_at_i * 1000 : time(c.created_at), depth: Math.min(entry.depth, 6),
+          url: id ? "https://news.ycombinator.com/item?id=" + id : null,
+        });
+      }
+      if (entry.depth < 64) {
+        for (let i = children.length - 1; i >= 0; i--) stack.push({ c: children[i], depth: entry.depth + 1 });
+      } else if (children.length) truncated = true;
+    }
+    truncated = truncated || stack.length > 0;
+  } else {
+    if (!data || !Array.isArray(data.comments)) throw new Error("no comment thread");
+    for (const c of data.comments.slice(0, MAX_COMMENTS)) {
+      if (!c || typeof c !== "object") continue;
+      const id = /^[a-z0-9]{1,10}$/.test(c.short_id || "") ? c.short_id : "";
+      const gone = c.is_deleted || c.is_moderated;
+      comments.push({
+        id, author: gone ? "[deleted]" : String(c.commenting_user || "Unknown"),
+        text: gone ? "Comment unavailable." : String(c.comment_plain == null ? commentText(c.comment) : c.comment_plain).slice(0, 20000),
+        time: time(c.created_at), depth: Math.max(0, Math.min(6, Number(c.depth) || 0)),
+        url: id ? "https://lobste.rs/c/" + id : null,
+      });
+    }
+    truncated = data.comments.length > MAX_COMMENTS;
+  }
+  return { comments, truncated };
+}
+
+// Media RSS, image enclosures, then the first image in RSS/Atom HTML content.
+function thumbnail(block, base) {
+  const media = block.match(/<media:thumbnail\b[^>]*>/gi) || [];
+  const content = block.match(/<(?:media:content|enclosure|link)\b[^>]*>/gi) || [];
+  for (const t of content) {
+    const type = attr(t, "type") || "";
+    if (/^image\//i.test(type) || attr(t, "medium") === "image") media.push(t);
+  }
+  const html = ["content:encoded", "description", "content", "summary"].map((name) => {
+    return decode((tag(block, name) || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1"));
+  }).join(" ");
+  const images = media.concat(html.match(/<img\b[^>]*>/gi) || []);
+  for (const image of images) {
+    const width = Number(attr(image, "width"));
+    const height = Number(attr(image, "height"));
+    if ((width > 0 && width <= 2) || (height > 0 && height <= 2)) continue;
+    const url = webUrl(attr(image, "url") || attr(image, "href") || attr(image, "src"), base);
+    if (url) return url;
+  }
+  return null;
+}
+
 // RSS 2.0 and Atom, in feed order. Google News titles end in " - Outlet", which becomes the source.
 function parseFeed(xml) {
   const items = [];
@@ -152,13 +265,14 @@ function parseFeed(xml) {
   for (const b of blocks) {
     let title = text(tag(b, "title"));
     let url = null;
+    let commentsUrl = null;
     const links = b.match(/<link\b[^>]*>/gi) || [];
     for (const l of links) {
       const href = attr(l, "href");
       const rel = attr(l, "rel");
-      if (href && (!rel || rel === "alternate")) {
+      if (rel === "replies" && (!attr(l, "type") || attr(l, "type") === "text/html")) commentsUrl = href;
+      if (!url && href && (!rel || rel === "alternate")) {
         url = href;
-        break;
       }
     }
     if (!url) url = text(tag(b, "link")) || null;
@@ -167,7 +281,13 @@ function parseFeed(xml) {
       if (guid && /^https?:/.test(text(guid))) url = text(guid);
     }
     const when = time(tag(b, "pubDate") || tag(b, "published") || tag(b, "updated") || tag(b, "dc:date"));
-    const item = { title, url, time: when };
+    const item = {
+      title, url, time: when,
+      thumbnail: thumbnail(b, url),
+      summary: excerpt(tag(b, "description") || tag(b, "summary") || tag(b, "content") || tag(b, "content:encoded")),
+      commentsUrl: webUrl(commentsUrl || text(tag(b, "comments")), url),
+      commentCount: commentCount(text(tag(b, "slash:comments") || tag(b, "thr:total"))),
+    };
     const source = b.match(/<source\b([^>]*)>([\s\S]*?)<\/source>/i);
     if (source) {
       item.outlet = text(source[2]);
@@ -180,22 +300,37 @@ function parseFeed(xml) {
   return items;
 }
 
-// Hacker News front page through Algolia's API. Only stories that link out: an
-// "Ask HN" post is its comment thread, and the comments are the Reddit part.
+// Hacker News front page through Algolia's API. Only stories that link out.
 function parseHn(body) {
   const hits = (JSON.parse(body).hits || []).slice().sort((a, b) => (b.points || 0) - (a.points || 0));
-  return hits.filter((h) => h.url && h.title).map((h) => ({ title: h.title, url: h.url, time: h.created_at_i ? h.created_at_i * 1000 : null, ai: isAi(h.title) }));
+  return hits.filter((h) => h.url && h.title).map((h) => ({
+    title: h.title, url: h.url, time: h.created_at_i ? h.created_at_i * 1000 : null, ai: isAi(h.title),
+    commentsUrl: /^\d+$/.test(String(h.objectID)) ? "https://news.ycombinator.com/item?id=" + h.objectID : null,
+    commentCount: commentCount(h.num_comments),
+  }));
 }
 
 function parseLobsters(body) {
   return JSON.parse(body)
     .filter((s) => s.url && s.title)
-    .map((s) => ({ title: s.title, url: s.url, time: Date.parse(s.created_at) || null, ai: isAi(s.title) || (s.tags || []).some((t) => t === "ai" || t === "vibecoding") }));
+    .map((s) => ({
+      title: s.title, url: s.url, time: Date.parse(s.created_at) || null, ai: isAi(s.title) || (s.tags || []).some((t) => t === "ai" || t === "vibecoding"),
+      commentsUrl: webUrl(s.comments_url || s.short_id_url), commentCount: commentCount(s.comment_count),
+      summary: excerpt(s.description_plain || s.description),
+    }));
 }
 
 function parseSteam(body) {
   const news = (JSON.parse(body).appnews || {}).newsitems || [];
-  return news.filter((n) => n.url && n.title).map((n) => ({ title: text(n.title), url: n.url, time: n.date ? n.date * 1000 : null }));
+  return news.filter((n) => n.url && n.title).map((n) => {
+    const content = String(n.contents || "").replace(/\{STEAM_CLAN_IMAGE\}/g, "https://clan.akamai.steamstatic.com/images");
+    const image = content.match(/\[img\]([\s\S]*?)\[\/img\]/i);
+    return {
+      title: text(n.title), url: n.url, time: n.date ? n.date * 1000 : null,
+      thumbnail: thumbnail("<description><![CDATA[" + content + "]]></description>", n.url) || webUrl(image && image[1], n.url),
+      summary: excerpt(content.replace(/\[img\][\s\S]*?\[\/img\]/gi, "")),
+    };
+  });
 }
 
 function parse(kind, body) {
@@ -237,7 +372,18 @@ function buildSection(section, cache, blocked) {
     const items = entry ? entry.items : [];
     return items
       .filter((i) => (!src.keep || src.keep(i)) && !isBlocked(i, blocked))
-      .map((i) => ({ title: i.title, url: i.url, time: i.time, source: i.outlet || src.name || def.name }));
+      .map((i) => {
+        const allowedUrl = (u) => {
+          const url = webUrl(u, i.url);
+          return url && !isBlocked({ url }, blocked) ? url : null;
+        };
+        const commentsUrl = allowedUrl(i.commentsUrl);
+        return {
+          title: i.title, url: i.url, time: i.time, source: i.outlet || src.name || def.name,
+          summary: i.summary || "", thumbnail: allowedUrl(i.thumbnail), commentsUrl, commentCount: commentCount(i.commentCount),
+          commentKey: discussionKey(commentsUrl),
+        };
+      });
   });
   const out = [];
   const seenUrl = {};
@@ -288,11 +434,12 @@ function httpText(url, redirects) {
 // fetchText(url) and now() can be swapped out in tests.
 function createNews({ dir, blocked, fetchText = httpText, now = Date.now, log = () => {}, retryMs = 2000 }) {
   const file = path.join(dir, "news-cache.json");
-  let cache = { fetchedAt: 0, sources: {} };
+  let cache = { version: CACHE_VERSION, fetchedAt: 0, sources: {} };
   try {
     cache = JSON.parse(fs.readFileSync(file, "utf8"));
   } catch (e) {}
   let running = null;
+  const threads = new Map();
 
   // Tries a feed twice, since one slow answer out of fifteen parallel requests is common.
   function fetchTwice(url) {
@@ -319,6 +466,7 @@ function createNews({ dir, blocked, fetchText = httpText, now = Date.now, log = 
           })
       )
     ).then(() => {
+      cache.version = CACHE_VERSION;
       cache.fetchedAt = now();
       try {
         fs.writeFileSync(file, JSON.stringify(cache));
@@ -336,11 +484,41 @@ function createNews({ dir, blocked, fetchText = httpText, now = Date.now, log = 
   // straight away, and a stale set is refreshed in the background for next time.
   async function get() {
     if (!cache.fetchedAt) await refresh();
-    else if (now() - cache.fetchedAt > REFRESH_MS) refresh();
+    else if (cache.version !== CACHE_VERSION || now() - cache.fetchedAt > REFRESH_MS) refresh();
     return { fetchedAt: cache.fetchedAt, nextAt: cache.fetchedAt + REFRESH_MS, refreshing: !!running, sections: sections() };
   }
 
-  return { get, refresh };
+  // Only fetch fixed API URLs for discussions attached to currently allowed stories.
+  // Shared promises prevent repeat clicks from making duplicate requests.
+  function comments(key) {
+    let item = null;
+    for (const section of sections()) {
+      item = section.items.filter((i) => i.commentKey && i.commentKey === key)[0];
+      if (item) break;
+    }
+    if (!item) return Promise.resolve({ status: "unavailable", comments: [] });
+    const parts = key.split(":");
+    const api = parts[0] === "hn" ? "https://hn.algolia.com/api/v1/items/" + parts[1] : "https://lobste.rs/s/" + parts[1] + ".json";
+    if (isBlocked({ url: api }, blocked)) return Promise.resolve({ status: "unavailable", comments: [] });
+    const old = threads.get(key);
+    if (old && old.until > now()) return old.promise;
+    const entry = { until: now() + COMMENTS_MS };
+    entry.promise = Promise.resolve().then(() => fetchText(api, 0)).then((body) => {
+      const thread = parseComments(parts[0], body);
+      return Object.assign({ status: "ready", source: parts[0] === "hn" ? "Hacker News" : "Lobsters", url: item.commentsUrl, fetchedAt: now() }, thread);
+    }).catch((e) => {
+      log("news comments failed: " + e.message);
+      entry.until = now() + 60000;
+      return { status: "error", comments: [] };
+    });
+    threads.delete(key);
+    threads.set(key, entry);
+    if (threads.size > 100) threads.delete(threads.keys().next().value);
+    return entry.promise;
+  }
+
+  return { get, refresh, comments };
 }
 
-module.exports = { createNews, parseFeed, parse, isAi, isPh, isBlocked, buildSection, SECTIONS, PER_SECTION, REFRESH_MS };
+module.exports = { createNews, parseFeed, parse, parseComments, isAi, isPh, isBlocked, buildSection, SECTIONS, PER_SECTION, REFRESH_MS, MAX_COMMENTS,
+  feed: { decode, text, tag, attr, commentText } };

@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forum</title>
+<script src="/topbar.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #0d0f13; --panel: #151920; --line: #262c37; --text: #e8eaee; --muted: #8a93a3; --accent: #f5b642; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 20px; margin: 0; }
+  .note { color: var(--muted); font-size: 13px; margin: 6px 0; }
+  button, input, select { font: inherit; }
+  button, summary { cursor: pointer; }
+  form { margin: 22px 0; }
+  .search-row { display: flex; gap: 8px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  input, select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; min-width: 0; }
+  #q { flex: 1; }
+  .search-button { background: var(--accent); color: var(--bg); border: 0; border-radius: 9px; padding: 10px 18px; font-weight: 600; }
+  .options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .options input, .options select { width: 100%; }
+  input:disabled { opacity: 0.45; }
+  .feed { display: flex; flex-direction: column; gap: 20px; margin-top: 18px; }
+  .story { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; min-width: 0; }
+  .story-body { padding: 22px 24px; }
+  .meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; color: var(--muted); font-size: 12px; }
+  .source { color: var(--accent); font-weight: 600; }
+  .community { color: var(--accent); border: 0; padding: 0; background: none; font-size: inherit; }
+  .community:hover { text-decoration: underline; }
+  h2 { margin: 12px 0; font-size: 23px; line-height: 1.35; letter-spacing: -0.025em; }
+  .post-title { padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; text-align: left; overflow-wrap: anywhere; }
+  .post-title:hover { color: var(--accent); }
+  .excerpt { color: #bac1cd; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; }
+  .post-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+  .full-post summary { color: var(--accent); font-size: 13px; }
+  .external { display: inline-block; margin-top: 10px; color: var(--accent); font-size: 13px; text-decoration: none; overflow-wrap: anywhere; }
+  .thumbnail { display: block; width: 100%; max-height: 380px; aspect-ratio: 16 / 9; object-fit: cover; background: var(--bg); }
+  .discussion { border-top: 1px solid var(--line); }
+  .discussion > summary { padding: 14px 24px; color: var(--accent); font-size: 13px; font-weight: 600; }
+  .discussion[open] > summary { border-bottom: 1px solid var(--line); }
+  .comments-body { padding: 6px 24px 22px; }
+  .comment { border-left: 2px solid var(--line); padding-left: 12px; margin: 18px 0 18px calc(var(--depth) * 14px); }
+  .comment-author { font-weight: 600; color: var(--text); }
+  .comment-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; margin: 7px 0; }
+  .more, .comment-more { border: 1px solid var(--line); border-radius: 20px; padding: 8px 16px; background: var(--panel); color: var(--text); font-size: 13px; }
+  .feed-end { text-align: center; margin-top: 24px; }
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 480px) {
+    .wrap { padding: 24px 12px 48px; }
+    .story-body { padding: 18px; }
+    h2 { font-size: 20px; }
+    .discussion > summary { padding: 14px 18px; }
+    .comments-body { padding: 6px 14px 18px; }
+    .comment { margin-left: calc(var(--depth) * 8px); padding-left: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Forum</h1>
+  <p class="note">Search public discussions on Reddit, Hacker News, and Lobsters. Read posts and comments here.</p>
+  <form id="search">
+    <label for="q">What would you like to read about?</label>
+    <div class="search-row">
+      <input id="q" name="q" type="search" maxlength="120" placeholder="Search a topic, question, or interest" autocomplete="off">
+      <button class="search-button" type="submit">Search</button>
+    </div>
+    <div class="options">
+      <div><label for="source">Forums</label><select id="source" name="source">
+        <option value="all">All forums</option><option value="reddit">Reddit</option><option value="hn">Hacker News</option><option value="lobsters">Lobsters</option>
+      </select></div>
+      <div><label for="community">Reddit community (optional)</label><input id="community" name="community" maxlength="24" placeholder="e.g. r/programming" autocomplete="off"></div>
+    </div>
+  </form>
+  <p class="note" id="status" role="status">Enter a topic to find discussions, or a Reddit community to browse its posts.</p>
+  <p class="note" id="warnings"></p>
+  <div class="feed" id="feed"></div>
+  <div class="feed-end" id="feed-end"><button class="more" id="more" type="button" hidden>Show more discussions</button><p class="note" id="end-note"></p></div>
+</div>
+<script>
+  const el = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const webUrl = (value) => {
+    if (!value) return "";
+    try { const u = new URL(value); return /^https?:$/.test(u.protocol) && !u.username && !u.password ? u.href : ""; }
+    catch (e) { return ""; }
+  };
+  const localImage = (value) => /^\/api\/forum\/image\?key=(?:reddit|hn|lobsters)%3A[a-z0-9]+$/i.test(value || "") ? value : "";
+  const PAGE_SIZE = 12;
+  const COMMENT_PAGE = 20;
+  let posts = [];
+  let shown = 0;
+  let generation = 0;
+  const threads = new Map();
+
+  function ago(t) {
+    if (!t) return "";
+    const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+    if (m < 1) return "just now";
+    if (m < 60) return `${m} min ago`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `${h} h ago`;
+    const d = Math.round(h / 24);
+    return d === 1 ? "yesterday" : `${d} days ago`;
+  }
+
+  function story(p, index) {
+    const image = localImage(p.thumbnail);
+    const external = webUrl(p.externalUrl);
+    const count = Number.isSafeInteger(p.commentCount) && p.commentCount >= 0 ? p.commentCount : null;
+    const label = count === null ? "Comments" : `${count} ${count === 1 ? "comment" : "comments"}`;
+    return `<article class="story"><div class="story-body"><div class="meta"><span class="source">${esc(p.sourceName)}</span>
+      ${p.community ? `<button class="community" type="button" data-community="${esc(p.community)}">r/${esc(p.community)}</button>` : ""}
+      ${p.author ? `<span>${esc(p.author)}</span>` : ""}${p.time ? `<span>${esc(ago(p.time))}</span>` : ""}</div>
+      <h2><button class="post-title" type="button" data-open="${index}">${esc(p.title)}</button></h2>
+      ${p.summary ? `<p class="excerpt">${esc(p.summary)}</p>` : ""}
+      ${p.body && p.body !== p.summary ? `<details class="full-post"><summary>Read full post</summary><p class="post-body">${esc(p.body)}</p></details>` : ""}
+      ${external ? `<a class="external" href="${esc(external)}" target="_blank" rel="noopener noreferrer">Read linked article ↗</a>` : ""}</div>
+      ${image ? `<img class="thumbnail" src="${esc(image)}" alt="" width="720" height="405" loading="lazy" decoding="async" onerror="this.hidden = true">` : ""}
+      <details class="discussion" data-post="${index}"><summary aria-label="${esc(label + " on " + p.title)}">${esc(label)}</summary>
+      <div class="comments-body" aria-live="polite"><p class="note">Open to load comments.</p></div></details></article>`;
+  }
+
+  function showMore() {
+    const next = Math.min(shown + PAGE_SIZE, posts.length);
+    el("feed").insertAdjacentHTML("beforeend", posts.slice(shown, next).map((p, n) => story(p, shown + n)).join(""));
+    shown = next;
+    el("more").hidden = shown >= posts.length;
+    el("end-note").textContent = posts.length && shown >= posts.length ? "You've reached the end of these results. Try another topic or community." : "";
+  }
+
+  function comment(c) {
+    const depth = Math.max(0, Math.min(6, Number(c.depth) || 0));
+    return `<div class="comment" style="--depth:${depth}"><div class="meta"><span class="comment-author">${esc(c.author)}</span>${c.time ? `<span>${esc(ago(c.time))}</span>` : ""}</div><p class="comment-text">${esc(c.text)}</p></div>`;
+  }
+
+  function renderThread(panel, state) {
+    const data = state.data;
+    if (data.status !== "ready") {
+      panel.innerHTML = `<p class="note">${data.status === "error" ? "Couldn't load comments. Try again." : "This discussion has expired here. Search again to reload it."}</p>`;
+      if (data.status === "error") panel.innerHTML += '<button class="comment-more" type="button" data-retry>Try again</button>';
+      return;
+    }
+    panel.innerHTML = data.note ? `<p class="note">${esc(data.note)}</p>` : "";
+    panel.innerHTML += data.comments.slice(0, state.shown).map(comment).join("") || '<p class="note">No comments in this public feed yet.</p>';
+    if (state.shown < data.comments.length) panel.innerHTML += '<button class="comment-more" type="button" data-comment-more>Show more comments</button>';
+    if (data.truncated) panel.innerHTML += '<p class="note">More comments may exist at the original forum.</p>';
+  }
+
+  async function loadComments(details) {
+    const post = posts[Number(details.dataset.post)];
+    if (!post) return;
+    const panel = details.querySelector(".comments-body");
+    let state = threads.get(post.key);
+    if (state && state.data) return renderThread(panel, state);
+    if (!state) {
+      state = { shown: COMMENT_PAGE };
+      state.pending = fetch(`/api/forum/comments?key=${encodeURIComponent(post.key)}`, { cache: "no-store" })
+        .then((res) => { if (!res.ok) throw new Error("request failed"); return res.json(); })
+        .then((data) => { if (!Array.isArray(data.comments)) throw new Error("invalid thread"); return data; })
+        .catch(() => ({ status: "error", comments: [] }));
+      threads.set(post.key, state);
+    }
+    panel.innerHTML = '<p class="note" role="status">Loading comments...</p>';
+    state.data = await state.pending;
+    renderThread(panel, state);
+  }
+
+  async function search() {
+    const mine = ++generation;
+    const q = el("q").value.trim();
+    const source = el("source").value;
+    const community = el("community").disabled ? "" : el("community").value.trim();
+    posts = [];
+    shown = 0;
+    threads.clear();
+    el("feed").innerHTML = "";
+    el("more").hidden = true;
+    el("end-note").textContent = "";
+    el("warnings").textContent = "";
+    const params = new URLSearchParams({ q, source, community });
+    history.replaceState(null, "", "/forum?" + params);
+    if (!q && !community) { el("status").textContent = "Enter a topic to find discussions, or a Reddit community to browse its posts."; return; }
+    el("status").textContent = "Searching the forums...";
+    try {
+      const res = await fetch("/api/forum?" + params, { cache: "no-store" });
+      if (!res.ok) throw new Error("Couldn't reach Focus Guard. Try again.");
+      const data = await res.json();
+      if (mine !== generation) return;
+      if (data.error) throw new Error(data.error);
+      if (!Array.isArray(data.posts)) throw new Error("Couldn't read the search results. Try again.");
+      posts = data.posts;
+      el("warnings").textContent = data.failed.length ? `${data.failed.join(", ")} couldn't be reached. Try again later.` : "";
+      el("status").textContent = posts.length ? `${posts.length} ${posts.length === 1 ? "discussion" : "discussions"}${data.query ? ` for "${data.query}"` : ` in r/${data.community}`}` : data.failed.length ? "No results could be loaded from the selected forums." : "No discussions found. Try a different topic or community.";
+      showMore();
+    } catch (e) { if (mine === generation) el("status").textContent = e.message || "Couldn't search the forums. Try again."; }
+  }
+
+  function sourceChanged() { el("community").disabled = el("source").value !== "all" && el("source").value !== "reddit"; }
+  el("search").addEventListener("submit", (event) => { event.preventDefault(); search(); });
+  el("source").addEventListener("change", sourceChanged);
+  el("more").addEventListener("click", showMore);
+  el("feed").addEventListener("toggle", (event) => { if (event.target.matches("details.discussion") && event.target.open) loadComments(event.target); }, true);
+  el("feed").addEventListener("click", (event) => {
+    const community = event.target.closest("button[data-community]");
+    if (community) { el("source").value = "reddit"; el("community").value = community.dataset.community; sourceChanged(); search(); return; }
+    const open = event.target.closest("button[data-open]");
+    if (open) {
+      const article = open.closest("article");
+      const body = article.querySelector(".full-post");
+      if (body) body.open = true;
+      article.querySelector(".discussion").open = true;
+      return;
+    }
+    const button = event.target.closest("button[data-comment-more], button[data-retry]");
+    if (!button) return;
+    const details = button.closest("details.discussion");
+    const post = posts[Number(details.dataset.post)];
+    const state = post && threads.get(post.key);
+    if (!state) return;
+    if (button.hasAttribute("data-retry")) { threads.delete(post.key); loadComments(details); }
+    else { state.shown += COMMENT_PAGE; renderThread(details.querySelector(".comments-body"), state); }
+  });
+  if ("IntersectionObserver" in window) new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting) && shown < posts.length) showMore();
+  }, { rootMargin: "400px" }).observe(el("feed-end"));
+  const params = new URLSearchParams(location.search);
+  el("q").value = (params.get("q") || "").slice(0, 120);
+  el("source").value = ["all", "reddit", "hn", "lobsters"].includes(params.get("source")) ? params.get("source") : "all";
+  el("community").value = (params.get("community") || "").slice(0, 24);
+  sourceChanged();
+  if (el("q").value || el("community").value) search();
+</script>
+</body>
+</html>

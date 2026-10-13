@@ -12,7 +12,7 @@ const read = (f) => fs.readFileSync(path.join(DIR, f), "utf8");
 // Every tab the daemon serves exists and loads the tab bar in <head>, before any inline
 // script (the other page tests take the first inline <script> as the page's code).
 const pages = JSON.parse(read("daemon.js").match(/const PAGES = (\{[^}]*\})/)[1]);
-assert.deepStrictEqual(Object.keys(pages), ["/", "/videos", "/dota", "/blocked", "/settings"]);
+assert.deepStrictEqual(Object.keys(pages), ["/", "/forum", "/videos", "/dota", "/blocked", "/settings"]);
 for (const file of Object.values(pages)) {
   const html = read(file);
   const head = html.split("</head>")[0];
@@ -43,7 +43,7 @@ function fakeDom() {
     },
   };
 }
-for (const [where, on] of [["/blocked", "Blocked sites"], ["/", "News"], ["/settings/", "Settings"]]) {
+for (const [where, on] of [["/blocked", "Blocked sites"], ["/", "News"], ["/forum", "Forum"], ["/settings/", "Settings"]]) {
   const dom = fakeDom();
   vm.runInNewContext(read("topbar.js"), { document: dom.document, location: { pathname: where } });
   const bar = dom.made.filter((n) => n.className === "topbar")[0];

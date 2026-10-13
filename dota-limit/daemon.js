@@ -10,6 +10,7 @@ const { createOpenDota, accountIdFromSteamId, RETRY_MINUTES } = require("./opend
 const insights = require("./insights");
 const { createNews } = require("./news");
 const { createVideos } = require("./videos");
+const { createForum } = require("./forum");
 
 const DIR = __dirname;
 const CONFIG = JSON.parse(fs.readFileSync(path.join(DIR, "config.json"), "utf8"));
@@ -17,7 +18,7 @@ const STATE_FILE = path.join(DIR, "state.json");
 const HISTORY_FILE = path.join(DIR, "history.json");
 const LOG_FILE = path.join(DIR, "log.txt");
 // The site's tabs. topbar.js draws the bar that links them.
-const PAGES = { "/": "news.html", "/videos": "videos.html", "/dota": "stats.html", "/blocked": "blocked.html", "/settings": "settings.html" };
+const PAGES = { "/": "news.html", "/forum": "forum.html", "/videos": "videos.html", "/dota": "stats.html", "/blocked": "blocked.html", "/settings": "settings.html" };
 const STATS_HOST = "focus";
 // Port 80 gives the page a clean address. If something else owns it (IIS, for
 // example), the page falls back to this port and the address includes it.
@@ -651,6 +652,7 @@ const SITES = readJson(path.join(DIR, "..", "browsers", "sites.json"), { block: 
 // Headlines for the front page. Links to sites the website blocker blocks are left out.
 const news = createNews({ dir: DIR, blocked: SITES.block || [], log });
 const videos = createVideos();
+const forum = createForum({ blocked: SITES.block || [], log });
 
 // What the Blocked sites and Settings tabs show: the settings the service is running with.
 // Read-only on purpose. Loosening a limit should take the installer and an admin password,
@@ -726,6 +728,36 @@ const statsServer = http.createServer((req, res) => {
     }
     if (url === "/api/news") {
       news.get().then(json, (e) => json({ error: e.message, sections: [] }));
+      return;
+    }
+    if (url === "/api/news/comments") {
+      if (req.method !== "GET") {
+        res.writeHead(405, { allow: "GET" });
+        return res.end();
+      }
+      const key = new URL(req.url, "http://x").searchParams.get("key");
+      news.comments(key).then(json, () => json({ status: "error", comments: [] }));
+      return;
+    }
+    if (url === "/api/forum" || url === "/api/forum/comments" || url === "/api/forum/image") {
+      if (req.method !== "GET") {
+        res.writeHead(405, { allow: "GET" });
+        return res.end();
+      }
+      const params = new URL(req.url, "http://x").searchParams;
+      if (url === "/api/forum") {
+        forum.search(params.get("q"), params.get("source"), params.get("community")).then(json, (e) => json({ error: e.message, posts: [], failed: [] }));
+      } else if (url === "/api/forum/comments") {
+        forum.comments(params.get("key")).then(json, () => json({ status: "error", comments: [] }));
+      } else {
+        forum.image(params.get("key")).then((image) => {
+          if (!image) { res.writeHead(404); return res.end(); }
+          res.setHeader("content-type", image.type);
+          res.setHeader("x-content-type-options", "nosniff");
+          res.setHeader("cache-control", "private, max-age=600");
+          res.end(image.body);
+        }, () => { res.writeHead(502); res.end(); });
+      }
       return;
     }
     const counterAsk = url.match(/^\/api\/counters\/(npc_dota_hero_[a-z_]+)$/);

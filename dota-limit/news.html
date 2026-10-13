@@ -6,7 +6,7 @@
 <title>News</title>
 <script src="/topbar.js" defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0d0f13;
@@ -18,24 +18,52 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 16px 64px; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
   header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
   h1 span { color: var(--muted); font-weight: 500; }
   .note { color: var(--muted); font-size: 13px; margin-top: 6px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 480px), 1fr)); gap: 16px; margin-top: 24px; }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 8px; min-width: 0; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 8px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
-  h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; }
-  ol { list-style: none; margin: 0; padding: 0; counter-reset: n; }
-  li { counter-increment: n; display: grid; grid-template-columns: 26px 1fr; gap: 4px; padding: 9px 0; border-top: 1px solid var(--line); }
-  li:first-child { border-top: 0; }
-  li::before { content: counter(n); font: 700 13px/1.6 "JetBrains Mono", monospace; color: var(--accent); }
-  li a { color: var(--text); text-decoration: none; font-weight: 500; overflow-wrap: anywhere; }
-  li a:hover { text-decoration: underline; }
-  li a:visited { color: var(--muted); }
-  .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  button { font: inherit; cursor: pointer; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 12px; }
+  .filters button, .more, .comment-more { border: 1px solid var(--line); border-radius: 20px; padding: 7px 13px; background: var(--panel); color: var(--muted); font-size: 13px; }
+  .filters button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+  .feed { display: flex; flex-direction: column; gap: 20px; margin-top: 16px; }
+  .story { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; min-width: 0; }
+  .story-body { padding: 22px 24px; }
+  .meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; color: var(--muted); font-size: 12px; }
+  .topic { color: var(--accent); font-weight: 600; }
+  h2 { font-size: 23px; line-height: 1.35; letter-spacing: -0.025em; margin: 12px 0; }
+  a { color: var(--text); overflow-wrap: anywhere; }
+  h2 a { text-decoration: none; }
+  h2 a:hover { text-decoration: underline; }
+  h2 a:visited { color: var(--muted); }
+  .excerpt { color: #bac1cd; font-size: 14px; margin: 0 0 16px; }
+  .read { color: var(--accent); font-size: 13px; text-decoration: none; }
+  .thumbnail { display: block; background: var(--bg); }
+  .thumbnail[hidden] { display: none; }
+  .thumbnail img { display: block; width: 100%; max-height: 380px; aspect-ratio: 16 / 9; object-fit: cover; }
+  .discussion { border-top: 1px solid var(--line); }
+  .discussion > summary { padding: 14px 24px; color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 600; }
+  .discussion[open] > summary { border-bottom: 1px solid var(--line); }
+  .comments-body { padding: 6px 24px 22px; }
+  .comment { border-left: 2px solid var(--line); padding: 0 0 0 12px; margin: 18px 0 18px calc(var(--depth) * 14px); }
+  .comment-author { font-weight: 600; color: var(--text); }
+  .comment-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; margin: 7px 0; }
+  .thread-link { display: inline-block; color: var(--muted); font-size: 12px; margin-top: 12px; }
+  .comment-more { margin-top: 10px; }
+  a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .empty { color: var(--muted); padding: 12px 0 16px; }
+  .feed-end { text-align: center; margin-top: 24px; }
+  .more { color: var(--text); padding: 10px 24px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 480px) {
+    .wrap { padding: 24px 12px 48px; }
+    .story-body { padding: 18px; }
+    h2 { font-size: 20px; }
+    .discussion > summary { padding: 14px 18px; }
+    .comments-body { padding: 6px 14px 18px; }
+    .comment { margin-left: calc(var(--depth) * 8px); padding-left: 8px; }
+  }
 </style>
 </head>
 <body>
@@ -44,11 +72,32 @@
     <h1>News <span id="day"></span></h1>
   </header>
   <div class="note" id="note">Getting the headlines. The first time takes a few seconds.</div>
-  <div class="grid" id="sections"></div>
+  <nav class="filters" id="filters" aria-label="News topics"></nav>
+  <div class="note" id="feed-status" role="status"></div>
+  <div class="note" id="warnings"></div>
+  <div class="feed" id="feed"></div>
+  <div class="feed-end" id="feed-end">
+    <button class="more" id="more" type="button" hidden>Show more stories</button>
+    <div class="note" id="end-note"></div>
+  </div>
 </div>
 <script>
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const clock = (t) => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const webUrl = (value) => {
+    if (!value) return "";
+    try {
+      const url = new URL(value);
+      return /^https?:$/.test(url.protocol) && !url.username && !url.password ? url.href : "";
+    } catch (e) { return ""; }
+  };
+  const PAGE_SIZE = 12;
+  const COMMENT_PAGE = 20;
+  let allStories = [];
+  let selected = "all";
+  let visible = [];
+  let shown = 0;
+  const threads = new Map();
 
   function ago(t) {
     if (!t) return "";
@@ -65,14 +114,96 @@
     document.getElementById("day").textContent = new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
     const next = data.nextAt > Date.now() ? `New headlines after ${clock(data.nextAt)}.` : "New headlines are on the way. Check back later.";
     document.getElementById("note").textContent = `Updated ${clock(data.fetchedAt)}. ${next}`;
-    document.getElementById("sections").innerHTML = data.sections.map((s) => `
-      <section>
-        <h2>${esc(s.title)}${s.failed.length ? `<small>${esc(s.failed.join(", "))} didn't answer</small>` : ""}</h2>
-        ${s.items.length ? `<ol>${s.items.map((i) => `
-          <li><div><a href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">${esc(i.title)}</a>
-          <div class="meta">${esc(i.source)}${i.time ? " · " + ago(i.time) : ""}</div></div></li>`).join("")}</ol>`
-          : `<div class="empty">No headlines right now.</div>`}
-      </section>`).join("");
+    const seen = new Set();
+    allStories = [];
+    // Mix topics in rounds so the default feed contains more than one subject.
+    const longest = Math.max(0, ...data.sections.map((s) => s.items.length));
+    for (let n = 0; n < longest; n++) {
+      for (const section of data.sections) {
+        const item = section.items[n];
+        if (!item || seen.has(item.url)) continue;
+        seen.add(item.url);
+        allStories.push({ ...item, topic: section.title, topicId: section.id });
+      }
+    }
+    document.getElementById("filters").innerHTML = [{ id: "all", title: "All" }, ...data.sections].map((s) =>
+      `<button type="button" data-topic="${esc(s.id)}" aria-pressed="${s.id === selected}">${esc(s.title)}</button>`).join("");
+    const failed = [...new Set(data.sections.flatMap((s) => s.failed))];
+    document.getElementById("warnings").textContent = failed.length ? `${failed.join(", ")} didn't answer. Saved stories may appear instead.` : "";
+    filterFeed();
+  }
+
+  function filterFeed() {
+    visible = allStories.filter((i) => selected === "all" || i.topicId === selected);
+    shown = 0;
+    document.getElementById("feed").innerHTML = visible.length ? "" : '<div class="empty">No stories right now.</div>';
+    showMore();
+  }
+
+  function showMore() {
+    const next = Math.min(shown + PAGE_SIZE, visible.length);
+    document.getElementById("feed").insertAdjacentHTML("beforeend", visible.slice(shown, next).map((i, n) => story(i, shown + n)).join(""));
+    shown = next;
+    document.getElementById("more").hidden = shown >= visible.length;
+    document.getElementById("feed-status").textContent = visible.length ? `${visible.length} stories · ${selected === "all" ? "All topics" : visible[0].topic}` : "";
+    document.getElementById("end-note").textContent = shown >= visible.length && visible.length ? "You've reached the end of the latest stories." : "";
+  }
+
+  function story(i, index = 0) {
+    const image = webUrl(i.thumbnail);
+    const comments = webUrl(i.commentsUrl);
+    const count = Number.isSafeInteger(i.commentCount) && i.commentCount >= 0 ? i.commentCount : null;
+    const label = count === null ? "Comments" : `${count} ${count === 1 ? "comment" : "comments"}`;
+    const available = !!i.commentKey && !!comments;
+    return `<article class="story">
+      <div class="story-body"><div class="meta"><span class="topic">${esc(i.topic || "News")}</span><span>${esc(i.source)}</span>${i.time ? `<span>${esc(ago(i.time))}</span>` : ""}</div>
+      <h2><a href="${esc(webUrl(i.url))}" target="_blank" rel="noopener noreferrer">${esc(i.title)}</a></h2>
+      ${i.summary ? `<p class="excerpt">${esc(i.summary)}</p>` : ""}
+      <a class="read" href="${esc(webUrl(i.url))}" target="_blank" rel="noopener noreferrer">Read article ↗</a></div>
+      ${image ? `<a class="thumbnail" href="${esc(webUrl(i.url))}" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-hidden="true">
+      <img src="${esc(image)}" alt="" width="720" height="405" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.parentElement.hidden = true"></a>` : ""}
+      <details class="discussion" data-story="${index}"><summary aria-label="${esc(label + " on " + i.title)}">${esc(available || comments ? label : "Comments unavailable")}</summary>
+      <div class="comments-body" aria-live="polite">${available ? '<p class="note">Open to load comments.</p>' : `<p class="note">This source doesn't share comments with Focus Guard.</p>${comments ? `<a class="thread-link" href="${esc(comments)}" target="_blank" rel="noopener noreferrer">View discussion at the source ↗</a>` : ""}`}</div></details>
+      </article>`;
+  }
+
+  function comment(c) {
+    const depth = Math.max(0, Math.min(6, Number(c.depth) || 0));
+    return `<div class="comment" style="--depth:${depth}"><div class="meta"><span class="comment-author">${esc(c.author)}</span>${c.time ? `<span>${esc(ago(c.time))}</span>` : ""}</div>
+      <p class="comment-text">${esc(c.text)}</p></div>`;
+  }
+
+  function renderThread(panel, state) {
+    const data = state.data;
+    if (data.status !== "ready") {
+      panel.innerHTML = `<p class="note">${data.status === "error" ? "Couldn't load comments. Try again in a minute." : "Comments aren't available for this story."}</p>`;
+      if (data.status === "error") panel.innerHTML += '<button class="comment-more" type="button" data-retry>Try again</button>';
+    } else {
+      panel.innerHTML = data.comments.slice(0, state.shown).map(comment).join("") || '<p class="note">No comments yet.</p>';
+      if (data.comments.length > state.shown) panel.innerHTML += '<button class="comment-more" type="button" data-comment-more>Show more comments</button>';
+      if (data.truncated) panel.innerHTML += `<p class="note">Showing the first ${data.comments.length} comments. The full thread is available at the source.</p>`;
+    }
+    const url = webUrl(state.item.commentsUrl);
+    if (url) panel.innerHTML += `<a class="thread-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">View full discussion at the source ↗</a>`;
+  }
+
+  async function loadComments(details) {
+    const item = visible[Number(details.dataset.story)];
+    if (!item || !item.commentKey || !webUrl(item.commentsUrl)) return;
+    const panel = details.querySelector(".comments-body");
+    let state = threads.get(item.commentKey);
+    if (state && state.data) return renderThread(panel, state);
+    if (!state) {
+      state = { item, shown: COMMENT_PAGE };
+      state.pending = fetch(`/api/news/comments?key=${encodeURIComponent(item.commentKey)}`, { cache: "no-store" })
+        .then((res) => { if (!res.ok) throw new Error("request failed"); return res.json(); })
+        .then((data) => { if (!Array.isArray(data.comments)) throw new Error("invalid thread"); return data; })
+        .catch(() => ({ status: "error", comments: [] }));
+      threads.set(item.commentKey, state);
+    }
+    panel.innerHTML = '<p class="note" role="status">Loading comments...</p>';
+    state.data = await state.pending;
+    renderThread(panel, state);
   }
 
   async function load() {
@@ -83,6 +214,37 @@
     } catch (e) {
       document.getElementById("note").textContent = "Couldn't get the headlines. Is this computer online?";
     }
+  }
+  document.getElementById("filters").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-topic]");
+    if (!button) return;
+    selected = button.dataset.topic;
+    document.getElementById("filters").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+    filterFeed();
+  });
+  document.getElementById("more").addEventListener("click", showMore);
+  document.getElementById("feed").addEventListener("toggle", (event) => {
+    if (event.target.matches("details.discussion") && event.target.open) loadComments(event.target);
+  }, true);
+  document.getElementById("feed").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-comment-more], button[data-retry]");
+    if (!button) return;
+    const details = button.closest("details.discussion");
+    const item = visible[Number(details.dataset.story)];
+    const state = item && threads.get(item.commentKey);
+    if (!state) return;
+    if (button.hasAttribute("data-retry")) {
+      threads.delete(item.commentKey);
+      loadComments(details);
+    } else {
+      state.shown += COMMENT_PAGE;
+      renderThread(details.querySelector(".comments-body"), state);
+    }
+  });
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting) && shown < visible.length) showMore();
+    }, { rootMargin: "400px" }).observe(document.getElementById("feed-end"));
   }
   load();
 </script>

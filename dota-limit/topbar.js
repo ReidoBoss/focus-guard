@@ -3,6 +3,7 @@
 (function () {
   const TABS = [
     ["/", "News"],
+    ["/forum", "Forum"],
     ["/videos", "Videos"],
     ["/dota", "Dota"],
     ["/blocked", "Blocked sites"],

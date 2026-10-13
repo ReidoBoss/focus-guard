@@ -124,7 +124,25 @@ The links at the top of the page jump to each section.
 
 ### The app at http://focus
 
-Focus Guard's pages share one tab bar: **News**, **Videos**, **Dota** (the stats page), **Blocked sites** (what's blocked, in which browsers, and whether the adult website block is on) and **Settings** (your Dota limit and the installer command to change it). Blocked sites and Settings only show settings. Changing them still takes the installer and your password, so loosening a limit takes a moment to think about.
+Focus Guard's pages share one tab bar: **News**, **Forum**, **Videos**, **Dota** (the stats page), **Blocked sites** (what's blocked, in which browsers, and whether the adult website block is on) and **Settings** (your Dota limit and the installer command to change it). Blocked sites and Settings only show settings. Changing them still takes the installer and your password, so loosening a limit takes a moment to think about.
+
+The screenshots below show example results in a local preview using cached public posts and feeds.
+
+### Forum
+
+**http://focus/forum** searches public discussions on **Reddit**, **Hacker News**, and **Lobsters**. Pick all forums or just one, enter a topic, and browse results in the same scrolling card layout as News. There's no home feed; discussions appear after you search.
+
+![Forum search results from Reddit, Hacker News, and Lobsters](docs/screenshots/forum-search.png)
+
+- Add a Reddit community such as **r/programming** to narrow a search. Leave the topic empty to browse that community's posts. Click a community name on a result to search there.
+- Click a discussion's title to expand its post and comments here. Longer posts have **Read full post**; longer threads have **Show more comments**. Images appear when the source provides them.
+- Reddit's public feeds include a selection of comments, without reply nesting or total comment counts. Hacker News and Lobsters show nested replies. If a forum doesn't answer, results from the other selected forums still appear.
+- Searches, comments, and images are saved for 10 minutes. Up to 60 results per source are read from the current search page or feed. Reddit images load through Focus Guard, so reddit.com and redd.it stay blocked in the browser. Links to blocked sites are left out.
+- Forum is for reading public posts and comments. Posting, voting, and signing in aren't supported.
+
+Posts and comments open inside the Forum tab:
+
+![A Reddit post and its comments expanded inside the Forum tab](docs/screenshots/forum-comments.png)
 
 ### Videos
 
@@ -136,10 +154,14 @@ Focus Guard's pages share one tab bar: **News**, **Videos**, **Dota** (the stats
 
 ### News
 
-**http://focus** is a short daily briefing for when Reddit is blocked: 10 headlines each for Programming, AI, Philippines, PH tech and startups, World, and Dota 2.
+**http://focus** is a scrolling news feed for Programming, AI, Philippines, PH tech and startups, World, and Dota 2. Read all topics together, or pick a topic at the top. More stories appear as you scroll, with up to 60 per topic from the current feeds.
+
+![News feed with story images and the World topic selected](docs/screenshots/news-feed.png)
 
 - Sources: Hacker News and Lobsters, Simon Willison, The Verge and TechCrunch, Rappler, Inquirer, GMA News and Philstar, Google News (for PH tech and startups), BBC, Al Jazeera and The Guardian, and Steam's Dota 2 announcements.
-- Headlines link to the article, never to a comment thread. Links to blocked sites are left out.
+- Each story has a headline, source, time, and an article preview and larger image when the feed includes them. Headlines link to the article. Links and images from blocked sites are left out.
+- Open **Comments** under a Hacker News or Lobsters story to read comments and replies right in the feed. **Show more comments** expands longer threads. Comments load only when opened and are saved for 10 minutes; counts beside stories reflect the last news update. You can also open the full discussion at the source.
+- Other publishers may not share their comments. Those stories say when comments aren't available here, and link to the source discussion when the feed includes one.
 - It updates at most every 3 hours, so reloading doesn't show anything new. The first visit takes a few seconds while it gets the headlines.
 
 ### Your heroes
