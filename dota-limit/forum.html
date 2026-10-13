@@ -143,7 +143,7 @@
   function renderThread(panel, state) {
     const data = state.data;
     if (data.status !== "ready") {
-      panel.innerHTML = `<p class="note">${data.status === "error" ? "Couldn't load comments. Try again." : "This discussion has expired here. Search again to reload it."}</p>`;
+      panel.innerHTML = `<p class="note">${esc(data.message || (data.status === "error" ? "Couldn't load comments. Try again." : "This discussion has expired here. Search again to reload it."))}</p>`;
       if (data.status === "error") panel.innerHTML += '<button class="comment-more" type="button" data-retry>Try again</button>';
       return;
     }
@@ -154,11 +154,20 @@
   }
 
   async function loadComments(details) {
+    const loadedGeneration = generation;
     const post = posts[Number(details.dataset.post)];
     if (!post) return;
     const panel = details.querySelector(".comments-body");
     let state = threads.get(post.key);
-    if (state && state.data) return renderThread(panel, state);
+    if (state && state.data && state.data.status === "error" && Date.now() >= state.retryAt) {
+      if (state.timer) clearTimeout(state.timer);
+      threads.delete(post.key);
+      state = null;
+    }
+    if (state && state.data) {
+      renderThread(panel, state);
+      return retryComments(details, post, state);
+    }
     if (!state) {
       state = { shown: COMMENT_PAGE };
       state.pending = fetch(`/api/forum/comments?key=${encodeURIComponent(post.key)}`, { cache: "no-store" })
@@ -169,7 +178,22 @@
     }
     panel.innerHTML = '<p class="note" role="status">Loading comments...</p>';
     state.data = await state.pending;
+    if (loadedGeneration !== generation || !details.isConnected) return;
+    state.retryAt = Number(state.data.retryAt) || Date.now() + 30000;
     renderThread(panel, state);
+    retryComments(details, post, state);
+  }
+
+  function retryComments(details, post, state) {
+    if (state.timer) clearTimeout(state.timer);
+    if (state.data.status !== "error" || state.data.autoRetry === false) return;
+    const current = generation;
+    state.timer = setTimeout(() => {
+      state.timer = null;
+      if (current !== generation || !details.isConnected || !details.open) return;
+      if (threads.get(post.key) === state) threads.delete(post.key);
+      loadComments(details);
+    }, Math.max(1000, state.retryAt - Date.now() + 500));
   }
 
   async function search() {
@@ -179,6 +203,7 @@
     const community = el("community").disabled ? "" : el("community").value.trim();
     posts = [];
     shown = 0;
+    threads.forEach((state) => { if (state.timer) clearTimeout(state.timer); });
     threads.clear();
     el("feed").innerHTML = "";
     el("more").hidden = true;
@@ -224,7 +249,7 @@
     const post = posts[Number(details.dataset.post)];
     const state = post && threads.get(post.key);
     if (!state) return;
-    if (button.hasAttribute("data-retry")) { threads.delete(post.key); loadComments(details); }
+    if (button.hasAttribute("data-retry")) { if (state.timer) clearTimeout(state.timer); threads.delete(post.key); loadComments(details); }
     else { state.shown += COMMENT_PAGE; renderThread(details.querySelector(".comments-body"), state); }
   });
   if ("IntersectionObserver" in window) new IntersectionObserver((entries) => {

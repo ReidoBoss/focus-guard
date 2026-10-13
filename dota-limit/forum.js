@@ -8,6 +8,7 @@ const SOURCES = { reddit: "Reddit", hn: "Hacker News", lobsters: "Lobsters" };
 const CACHE_MS = 10 * 60000;
 const POST_MS = 3600000;
 const LIMIT = 60;
+const REDDIT_LIMIT = 25;
 const UA = "focus-guard/1.0 (github.com/ReidoBoss/focus-guard)";
 const IMAGE_HOSTS = ["i.redd.it", "preview.redd.it", "external-preview.redd.it", "a.thumbs.redditmedia.com", "b.thumbs.redditmedia.com"];
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -28,6 +29,20 @@ function imageUrl(value) {
 
 function shorten(s) {
   return s.length > 300 ? s.slice(0, 297).trim() + "..." : s;
+}
+
+// Keep the post's canonical path for its comment feed. Never accept another host,
+// port, or post id from the public feed as a destination for the service.
+function redditPostUrl(value, id) {
+  const safe = webUrl(value);
+  if (safe) {
+    const u = new URL(safe);
+    const match = u.pathname.match(/^\/(?:r\/[a-z0-9_]+\/)?comments\/([a-z0-9]+)(?:\/|$)/i);
+    if (u.protocol === "https:" && !u.port && (u.hostname === "www.reddit.com" || u.hostname === "reddit.com") && match && match[1] === id) {
+      return "https://www.reddit.com" + u.pathname.replace(/\/*$/, "/");
+    }
+  }
+  return "https://www.reddit.com/comments/" + id + "/";
 }
 
 function redditEntries(xml) {
@@ -56,7 +71,7 @@ function parseReddit(xml) {
     return {
       key: "reddit:" + id, source: "reddit", sourceName: "Reddit", community: /^[a-z0-9_]{2,21}$/i.test(p.community) ? p.community : "",
       title: p.item.title, author: p.author, time: p.item.time, body: p.body, summary: shorten(p.body),
-      url: "https://www.reddit.com/comments/" + id + "/", thumbnail: imageUrl(p.item.thumbnail), commentCount: null,
+      url: redditPostUrl(p.item.url, id), thumbnail: imageUrl(p.item.thumbnail), commentCount: null,
     };
   }).filter((p) => { if (seen[p.key]) return false; seen[p.key] = true; return true; });
 }
@@ -157,10 +172,19 @@ function createForum({ blocked = [], fetchText = (url) => request(url, 5 * 1024 
   const cooldowns = new Map();
 
   async function sourceText(provider, url) {
-    if ((cooldowns.get(provider) || 0) > now()) throw new Error("source is resting after a rate limit");
+    const until = cooldowns.get(provider) || 0;
+    if (until > now()) {
+      const e = new Error("source is resting after a rate limit");
+      e.statusCode = 429;
+      e.retryAt = until;
+      throw e;
+    }
     try { return await fetchText(url); }
     catch (e) {
-      if (e.statusCode === 429) cooldowns.set(provider, now() + Math.min(15 * 60000, Math.max(60000, e.retryMs || 60000)));
+      if (e.statusCode === 429) {
+        e.retryAt = now() + Math.min(15 * 60000, Math.max(60000, e.retryMs || 60000));
+        cooldowns.set(provider, e.retryAt);
+      }
       throw e;
     }
   }
@@ -203,7 +227,7 @@ function createForum({ blocked = [], fetchText = (url) => request(url, 5 * 1024 
         let parse;
         if (provider === "reddit") {
           const base = "https://www.reddit.com" + (sub ? "/r/" + encodeURIComponent(sub) : "");
-          url = base + (q ? "/search.rss?q=" + encodeURIComponent(q) + "&sort=relevance&restrict_sr=" + (sub ? "on" : "off") + "&include_over_18=off&limit=" + LIMIT : "/.rss?limit=" + LIMIT);
+          url = base + (q ? "/search.rss?q=" + encodeURIComponent(q) + "&sort=relevance&restrict_sr=" + (sub ? "on" : "off") + "&include_over_18=off&limit=" + REDDIT_LIMIT : "/.rss?limit=" + REDDIT_LIMIT);
           parse = parseReddit;
         } else if (provider === "hn") {
           url = "https://hn.algolia.com/api/v1/search?tags=story&hitsPerPage=" + LIMIT + "&query=" + encodeURIComponent(q);
@@ -239,11 +263,24 @@ function createForum({ blocked = [], fetchText = (url) => request(url, 5 * 1024 
     if (!post) return Promise.resolve({ status: "unavailable", comments: [] });
     return memo(threads, key, 100, async () => {
       const id = post.key.split(":")[1];
-      const url = post.source === "reddit" ? "https://www.reddit.com/comments/" + id + "/.rss?limit=100&sort=top" :
+      const url = post.source === "reddit" ? post.url + ".rss?limit=50&sort=top" :
         post.source === "hn" ? "https://hn.algolia.com/api/v1/items/" + id : "https://lobste.rs/s/" + id + ".json";
       const body = await sourceText(post.source, url);
       const thread = post.source === "reddit" ? parseRedditComments(body) : parseComments(post.source, body);
       return Object.assign({ status: "ready" }, thread);
+    }).catch((e) => {
+      log("forum comments: " + key + " failed: " + e.message);
+      const limited = e.statusCode === 429;
+      const missing = e.statusCode === 404;
+      const autoRetry = limited || !e.statusCode || e.statusCode >= 500;
+      const minutes = limited ? Math.max(1, Math.ceil((e.retryAt - now()) / 60000)) : 0;
+      return {
+        status: missing ? "unavailable" : "error", comments: [],
+        message: limited ? post.sourceName + " is temporarily limiting requests. Comments will retry in about " + minutes + (minutes === 1 ? " minute." : " minutes.") :
+          missing ? "This discussion is no longer available at " + post.sourceName + "." :
+          e.statusCode === 403 ? post.sourceName + " isn't sharing this public comment feed right now." : "Couldn't load comments from " + post.sourceName + ". Try again.",
+        retryAt: limited ? e.retryAt : autoRetry ? now() + 30000 : null, autoRetry,
+      };
     });
   }
 

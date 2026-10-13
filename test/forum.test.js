@@ -5,7 +5,7 @@ const vm = require("vm");
 const assert = require("assert");
 const { createForum, parseReddit, parseRedditComments, parseHn, parseLobsters } = require("../dota-limit/forum");
 
-const entry = (id, title, content, extra) => `<entry><id>${id}</id><title>${title}</title><author><name>/u/reader</name></author><category term="programming" label="r/programming"/><link href="https://www.reddit.com/r/programming/comments/abc/example/${id}/"/><updated>2026-10-13T00:00:00Z</updated><content type="html">${content}</content>${extra || ""}</entry>`;
+const entry = (id, title, content, extra) => `<entry><id>${id}</id><title>${title}</title><author><name>/u/reader</name></author><category term="programming" label="r/programming"/><link href="https://www.reddit.com/r/programming/comments/${id.startsWith("t3_") ? id.slice(3) : "abc"}/example/${id.startsWith("t1_") ? id.slice(3) + "/" : ""}"/><updated>2026-10-13T00:00:00Z</updated><content type="html">${content}</content>${extra || ""}</entry>`;
 const content = "&lt;!-- SC_OFF --&gt;&lt;div&gt;&lt;p&gt;A question &amp;amp; some code: a &amp;lt; b.&lt;/p&gt;&lt;/div&gt;&lt;!-- SC_ON --&gt; submitted by user";
 const reddit = `<feed>${entry("t3_abc", "A Reddit question", content, '<media:thumbnail url="https://preview.redd.it/example.jpg?width=600&amp;format=pjpg"/>')}${entry("t3_def", "Another question", content)}${entry("t3_def", "Repeated", content)}${entry("invalid", "Invalid", content)}</feed>`;
 const redditComments = `<feed>${entry("t3_abc", "Original post", content)}${entry("t1_reply", "Reply", content)}${entry("t1_reply2", "Another reply", "&lt;p&gt;A second reply.&lt;/p&gt;")}</feed>`;
@@ -21,6 +21,8 @@ const lobstersComments = JSON.stringify({ comments: [{ short_id: "c123", comment
 
 assert.strictEqual(parseReddit(reddit).length, 2, "invalid ids and duplicate posts omitted");
 assert.strictEqual(parseReddit(reddit)[0].key, "reddit:abc");
+assert.strictEqual(parseReddit(reddit)[0].url, "https://www.reddit.com/r/programming/comments/abc/example/", "canonical post path retained for its comment feed");
+assert.strictEqual(parseReddit(reddit.replace("www.reddit.com/r/programming/comments/abc", "private.invalid/r/programming/comments/abc"))[0].url, "https://www.reddit.com/comments/abc/", "untrusted canonical destinations fall back to a fixed Reddit URL");
 assert.strictEqual(parseReddit(reddit)[0].community, "programming");
 assert.strictEqual(parseReddit(reddit)[0].body, "A question & some code: a < b.", "RSS bodies decode once per encoding layer and omit metadata");
 assert.strictEqual(parseReddit(reddit)[0].thumbnail, "https://preview.redd.it/example.jpg?width=600&format=pjpg");
@@ -43,7 +45,7 @@ console.log("ok: forum parsers");
   const fetchText = async (url) => {
     urls.push(url);
     if (failing && url.includes(failing)) throw new Error("unavailable");
-    if (url.includes("reddit.com/comments/")) return redditComments;
+    if (url.includes("reddit.com") && url.includes("/comments/")) return redditComments;
     if (url.includes("reddit.com")) return reddit;
     if (url.includes("hn.algolia.com/api/v1/items/")) return hnComments;
     if (url.includes("hn.algolia.com")) return hn;
@@ -71,7 +73,7 @@ console.log("ok: forum parsers");
   const [thread, same] = await Promise.all([forum.comments("reddit:abc"), forum.comments("reddit:abc")]);
   assert.strictEqual(thread, same);
   assert.strictEqual(thread.comments.length, 2);
-  assert.ok(urls[3].startsWith("https://www.reddit.com/comments/abc/.rss?"));
+  assert.strictEqual(urls[3], "https://www.reddit.com/r/programming/comments/abc/example/.rss?limit=50&sort=top");
   await forum.comments("reddit:abc");
   assert.strictEqual(urls.length, 4, "comments are cached");
   assert.strictEqual((await forum.comments("hn:123")).comments[1].depth, 1);
@@ -110,6 +112,24 @@ console.log("ok: forum parsers");
   clock += 121000;
   await limited.search("second", "reddit", "");
   assert.strictEqual(rateCalls, beforeCooldown + 1, "rate limit cooldown honors Retry-After");
+  let commentRateCalls = 0;
+  let limitComments = true;
+  const recoverable = createForum({ now: () => clock, fetchText: async (url) => {
+    if (!url.includes("/comments/")) return reddit;
+    commentRateCalls++;
+    if (limitComments) { const e = new Error("rate limit"); e.statusCode = 429; e.retryMs = 120000; throw e; }
+    return redditComments;
+  } });
+  await recoverable.search("comments", "reddit", "");
+  const rateError = await recoverable.comments("reddit:abc");
+  assert.strictEqual(rateError.status, "error");
+  assert.strictEqual(rateError.retryAt, clock + 120000);
+  assert.ok(rateError.message.includes("temporarily limiting requests"), "comment errors identify the source and its retry time");
+  assert.strictEqual((await recoverable.comments("reddit:abc")).retryAt, rateError.retryAt);
+  assert.strictEqual(commentRateCalls, 1, "reopening during cooldown does not repeat the failed request");
+  limitComments = false;
+  clock = rateError.retryAt + 1;
+  assert.strictEqual((await recoverable.comments("reddit:abc")).status, "ready", "failed comments aren't cached for ten minutes");
   clock += 61 * 60000;
   assert.strictEqual((await forum.comments("reddit:abc")).status, "unavailable", "old search results expire");
   const invalidImage = createForum({ fetchText, fetchImage: async () => ({ type: "text/html", body: Buffer.from("<script>x</script>") }) });
@@ -128,14 +148,19 @@ console.log("ok: forum parsers");
   const many = Object.assign({}, result, { posts: Array.from({ length: 30 }, (_, i) => Object.assign({}, result.posts[0], { key: "reddit:" + i, title: i === 0 ? "<script>title</script>" : "Discussion " + i, body: "Full post\n\n" + "x".repeat(350) })) });
   const clientCalls = [];
   let failComments = false;
+  let clientThread = thread;
   let slowResolve;
-  const context = { console, Date, Math, JSON, Object, Array, String, Number, Promise, URL, URLSearchParams, Map, encodeURIComponent,
+  let browserNow = Date.now();
+  const timers = new Map();
+  let timerId = 0;
+  const context = { console, Date: class extends Date { static now() { return browserNow; } }, Math, JSON, Object, Array, String, Number, Promise, URL, URLSearchParams, Map, encodeURIComponent,
+    setTimeout: (fn, delay) => { const id = ++timerId; timers.set(id, { fn: () => { timers.delete(id); fn(); }, delay }); return id; }, clearTimeout: (id) => timers.delete(id),
     window: {}, location: { search: "" }, history: { replaceState: () => {} }, document: { getElementById: el },
     fetch: async (url) => {
       clientCalls.push(url);
       if (url.startsWith("/api/forum/comments")) {
         if (failComments) throw new Error("offline");
-        return { ok: true, json: async () => thread };
+        return { ok: true, json: async () => clientThread };
       }
       if (url.includes("q=slow")) return new Promise((resolve) => { slowResolve = () => resolve({ ok: true, json: async () => Object.assign({}, many, { query: "slow" }) }); });
       return { ok: true, json: async () => many };
@@ -152,7 +177,7 @@ console.log("ok: forum parsers");
   el("more").handlers.click();
   assert.strictEqual((el("feed").innerHTML.match(/<article class="story">/g) || []).length, 24);
   const panel = { innerHTML: "" };
-  const details = { dataset: { post: "0" }, querySelector: () => panel };
+  const details = { dataset: { post: "0" }, querySelector: () => panel, isConnected: true, open: true };
   await context.loadComments(details);
   assert.ok(panel.innerHTML.includes("A question &amp; some code: a &lt; b.") && panel.innerHTML.includes("selection"));
   const beforeReopen = clientCalls.length;
@@ -162,7 +187,36 @@ console.log("ok: forum parsers");
   vm.runInNewContext("threads.clear()", context);
   failComments = true;
   await context.loadComments(details);
-  assert.ok(panel.innerHTML.includes("Couldn't load comments") && panel.innerHTML.includes("Try again"));
+  assert.ok(panel.innerHTML.includes("load comments") && panel.innerHTML.includes("Try again"));
+  assert.strictEqual(timers.size, 1, "open failed threads schedule one retry");
+  const retryTimer = Array.from(timers.values())[0];
+  assert.ok(retryTimer.delay >= 30000, "transient failures wait before retrying");
+  failComments = false;
+  browserNow += retryTimer.delay;
+  retryTimer.fn();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(panel.innerHTML.includes("A question &amp; some code"), "open Reddit comments recover automatically after the wait");
+  vm.runInNewContext("threads.clear()", context);
+  timers.clear();
+  failComments = true;
+  await context.loadComments(details);
+  failComments = false;
+  browserNow += 31000;
+  await context.loadComments(details);
+  assert.ok(panel.innerHTML.includes("A question &amp; some code"), "reopening after an error fetches fresh comments instead of retaining the failure");
+  vm.runInNewContext("threads.clear()", context);
+  timers.clear();
+  clientThread = { status: "error", comments: [], message: "Reddit is temporarily limiting requests.", retryAt: browserNow + 120000 };
+  await context.loadComments(details);
+  const serverRetry = Array.from(timers.values())[0];
+  assert.ok(serverRetry.delay >= 120000, "client honors the server's retry time instead of retrying immediately");
+  clientThread = thread;
+  browserNow += serverRetry.delay;
+  serverRetry.fn();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(panel.innerHTML.includes("A question &amp; some code"), "rate-limited comments recover while still open");
+  context.renderThread(panel, { data: { status: "error", comments: [], message: "Reddit is temporarily limiting requests." } });
+  assert.ok(panel.innerHTML.includes("Reddit is temporarily limiting requests."), "retry reason is shown in the page");
   el("source").value = "hn";
   context.sourceChanged();
   assert.ok(el("community").disabled);

@@ -2,7 +2,9 @@
 
 [![test](https://github.com/ReidoBoss/focus-guard/actions/workflows/test.yml/badge.svg)](https://github.com/ReidoBoss/focus-guard/actions/workflows/test.yml)
 
-Self-control tools for people who want to get better at life:
+Self-control tools for people who want to get better at life.
+
+![Forum search results from Reddit, Hacker News, and Lobsters](docs/screenshots/forum-search.png)
 
 - **Dota Limit**: one best-of-3 Dota 2 series per day. When the series is decided (2-0, 0-2, or after game 3), Steam is closed and stays closed until 4 AM. Saturday and Sunday can have their own limit, like 7 games. Comes with a stats page at **http://focus/dota**.
 - **Website blocker**: blocks Facebook, YouTube and Reddit, except **facebook.com/messages** and YouTube's embedded player (for the Videos tab), in Brave, Chrome, Edge, Firefox and Chromium. On macOS it can also stop Safari from opening.
@@ -132,12 +134,11 @@ The screenshots below show example results in a local preview using cached publi
 
 **http://focus/forum** searches public discussions on **Reddit**, **Hacker News**, and **Lobsters**. Pick all forums or just one, enter a topic, and browse results in the same scrolling card layout as News. There's no home feed; discussions appear after you search.
 
-![Forum search results from Reddit, Hacker News, and Lobsters](docs/screenshots/forum-search.png)
-
 - Add a Reddit community such as **r/programming** to narrow a search. Leave the topic empty to browse that community's posts. Click a community name on a result to search there.
 - Click a discussion's title to expand its post and comments here. Longer posts have **Read full post**; longer threads have **Show more comments**. Images appear when the source provides them.
 - Reddit's public feeds include a selection of comments, without reply nesting or total comment counts. Hacker News and Lobsters show nested replies. If a forum doesn't answer, results from the other selected forums still appear.
-- Searches, comments, and images are saved for 10 minutes. Up to 60 results per source are read from the current search page or feed. Reddit images load through Focus Guard, so reddit.com and redd.it stay blocked in the browser. Links to blocked sites are left out.
+- If comments fail temporarily, keep the thread open and Focus Guard retries them. Reddit's rate-limit wait is respected, and reopening a failed thread after the wait tries again.
+- Searches, comments, and images are saved for 10 minutes. Reddit searches request 25 posts at a time to keep requests smaller; the other sources read up to 60 results from their current search page or feed. Reddit images load through Focus Guard, so reddit.com and redd.it stay blocked in the browser. Links to blocked sites are left out.
 - Forum is for reading public posts and comments. Posting, voting, and signing in aren't supported.
 
 Posts and comments open inside the Forum tab:
