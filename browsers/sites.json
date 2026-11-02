@@ -13,5 +13,9 @@
     "facebook.com/checkpoint",
     "facebook.com/two_step_verification",
     "youtube-nocookie.com/embed"
+  ],
+  "planAllow": [
+    "spotify.com",
+    "spotify.link"
   ]
 }

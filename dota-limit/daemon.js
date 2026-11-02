@@ -11,6 +11,7 @@ const insights = require("./insights");
 const { createNews } = require("./news");
 const { createVideos } = require("./videos");
 const { createForum } = require("./forum");
+const plan = require("./plan");
 
 const DIR = __dirname;
 const CONFIG = JSON.parse(fs.readFileSync(path.join(DIR, "config.json"), "utf8"));
@@ -18,7 +19,7 @@ const STATE_FILE = path.join(DIR, "state.json");
 const HISTORY_FILE = path.join(DIR, "history.json");
 const LOG_FILE = path.join(DIR, "log.txt");
 // The site's tabs. topbar.js draws the bar that links them.
-const PAGES = { "/": "news.html", "/forum": "forum.html", "/videos": "videos.html", "/dota": "stats.html", "/blocked": "blocked.html", "/settings": "settings.html" };
+const PAGES = { "/": "news.html", "/plan": "plan.html", "/forum": "forum.html", "/videos": "videos.html", "/dota": "stats.html", "/blocked": "blocked.html", "/settings": "settings.html" };
 const STATS_HOST = "focus";
 // Port 80 gives the page a clean address. If something else owns it (IIS, for
 // example), the page falls back to this port and the address includes it.
@@ -35,6 +36,7 @@ const BLOCK_ADULT = CONFIG.blockAdult === true;
 const TILT_CHECK = CONFIG.tiltCheck !== false;
 const PARSE_REPLAYS = CONFIG.parseReplays !== false;
 const WEEKLY_SUMMARY = CONFIG.weeklySummary !== false;
+const PLAN_LOCK = CONFIG.planLock === true;
 
 const LIVE_STATES = new Set([
   "DOTA_GAMERULES_STATE_STRATEGY_TIME",
@@ -654,6 +656,21 @@ const news = createNews({ dir: DIR, blocked: SITES.block || [], log });
 const videos = createVideos();
 const forum = createForum({ blocked: SITES.block || [], log });
 
+// Today's plan. With planLock on, the web stays locked until its first `gate` tasks are
+// ticked: the other tabs here redirect to /plan, and so does every site in a browser with
+// the extension, except the sites in sites.json's planAllow (Spotify).
+const PLAN_FILE = path.join(DIR, "plan.json");
+const PLAN_OPEN = ["/plan", "/blocked", "/settings"];
+function loadPlan() {
+  const p = readJson(PLAN_FILE, null);
+  if (p && p.day === dayKey()) return p;
+  return { day: dayKey(), tasks: [], gate: (p && p.gate) || 3 };
+}
+function planStatus() {
+  const p = loadPlan();
+  return Object.assign(p, { on: PLAN_LOCK, locked: PLAN_LOCK && plan.locked(p), allow: SITES.planAllow || [] });
+}
+
 // What the Blocked sites and Settings tabs show: the settings the service is running with.
 // Read-only on purpose. Loosening a limit should take the installer and an admin password,
 // and anything on 127.0.0.1 can be reached by any website the browser opens.
@@ -714,6 +731,38 @@ const statsServer = http.createServer((req, res) => {
       return json(Object.assign(insights.weekly(days, start), { thisWeek: insights.weekStartOf(state.day), firstWeek: insights.weekStartOf(earliest) }));
     }
     if (url === "/api/settings") return json(settings());
+    if (url === "/api/plan" && req.method === "POST") {
+      // Only the plan page may change the plan; any website can send requests to 127.0.0.1.
+      const origin = (req.headers.origin || "").match(/^http:\/\/([^:/]+)(:\d+)?$/);
+      if (!origin || origin[1] !== STATS_HOST) {
+        res.writeHead(403);
+        return res.end();
+      }
+      let body = "";
+      req.on("data", (c) => {
+        body += c;
+        if (body.length > 64 * 1024) req.destroy();
+      });
+      req.on("end", () => {
+        let ask;
+        try {
+          ask = JSON.parse(body) || {};
+        } catch (e) {
+          res.writeHead(400);
+          return res.end();
+        }
+        const p = loadPlan();
+        if (typeof ask.text === "string") {
+          p.tasks = plan.parse(ask.text, p.tasks);
+          p.gate = Math.max(1, Math.min(100, Math.floor(Number(ask.gate)) || 1));
+        }
+        if (Number.isInteger(ask.check) && p.tasks[ask.check]) p.tasks[ask.check].done = ask.done === true;
+        fs.writeFileSync(PLAN_FILE, JSON.stringify(p, null, 2));
+        json(planStatus());
+      });
+      return;
+    }
+    if (url === "/api/plan") return json(planStatus());
     if (url === "/topbar.js") {
       res.setHeader("content-type", "text/javascript; charset=utf-8");
       return fs.createReadStream(path.join(DIR, "topbar.js")).pipe(res);
@@ -778,6 +827,10 @@ const statsServer = http.createServer((req, res) => {
     }
     if (!PAGES[url]) {
       res.writeHead(302, { location: "/" });
+      return res.end();
+    }
+    if (PLAN_LOCK && !PLAN_OPEN.includes(url) && plan.locked(loadPlan())) {
+      res.writeHead(302, { location: "/plan" });
       return res.end();
     }
     res.setHeader("content-type", "text/html; charset=utf-8");

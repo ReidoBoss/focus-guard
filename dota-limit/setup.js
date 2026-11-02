@@ -34,6 +34,7 @@ const DEFAULTS = {
   tiltCheck: true,
   parseReplays: true,
   weeklySummary: true,
+  planLock: false,
 };
 
 // Installer answers that map straight onto config.json.

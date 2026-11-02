@@ -19,7 +19,7 @@ Self-control tools installed with one command on macOS, Ubuntu and Windows:
 | `dota-limit/vdf.js` | Valve KeyValues parser/writer. |
 | `dota-limit/gsi.js` | The GSI config file, shared by `setup.js` and `daemon.js`. |
 | `dota-limit/notifier.js` | Windows only. Polls `/notices` and shows toasts in the user's session. |
-| `dota-limit/topbar.js` | Runs in the browser. The tab bar (News, Forum, Videos, Dota, Blocked sites, Settings) on every page of `http://focus`. The routes are `PAGES` in `daemon.js`. |
+| `dota-limit/topbar.js` | Runs in the browser. The tab bar (News, Plan, Forum, Videos, Dota, Blocked sites, Settings) on every page of `http://focus`. The routes are `PAGES` in `daemon.js`. |
 | `dota-limit/blocked.html`, `settings.html` | The Blocked sites and Settings tabs. Read-only, from `/api/settings`: loosening a limit must take the installer, and any website can send requests to 127.0.0.1. |
 | `dota-limit/stats.html` | Stats page at `/dota`, served by the daemon. Polls `/api`. Also renders the teammates and enemies panel and decides its labels (`chips()`). |
 | `dota-limit/insights.js` | Hero report, tilt check, lane results, gold swing, counter-picks and weekly summary. Pure functions with no network or file access; the daemon feeds them data. |
@@ -27,11 +27,12 @@ Self-control tools installed with one command on macOS, Ubuntu and Windows:
 | `dota-limit/videos.js` | YouTube search for `/videos` (`videos.html`). Reads `ytInitialData` from YouTube's own search page (the Data API needs a key), videos only, without Shorts, live streams or anything under 2 minutes. The page plays through `youtube-nocookie.com/embed`, an `allow` entry in `sites.json`; youtube.com stays blocked. |
 | `dota-limit/forum.js` | Search-only Forum reader at `/forum` (`forum.html`). Reads Reddit's public RSS search, community and comment feeds, Algolia's Hacker News search, and Lobsters' public search HTML and comment JSON. Reuses news feed helpers and comment parsing. Searches and comments cache for 10 minutes. Comment and image endpoints only accept posts from recent search results; the image endpoint only fetches fixed Reddit CDN hosts, supported raster types, up to 2 MB. No browser policy exceptions are added. |
 | `dota-limit/opendota.js` | After a match, fetches the scoreboard and each public player's profile from OpenDota. Requests go out one at a time, about 1.1 s apart, because the free tier allows 60 a minute. |
-| `browsers/sites.json` | Blocked and allowed sites. The only list; every browser format is generated from it. |
+| `dota-limit/plan.js` | Today's plan (`plan.html` at `/plan`): parses the pasted checklist and decides whether the web is locked. The daemon keeps it in `plan.json`, resets it at `resetHour`, and serves `/api/plan`. With `planLock` on, the daemon redirects its other tabs to `/plan` and the extension redirects every other site there, except `planAllow`. POSTs must come from an `http://focus` origin. |
+| `browsers/sites.json` | Blocked and allowed sites, plus `planAllow` (open while the plan lock is on). The only list; every browser format is generated from it. |
 | `browsers/policies.js` | Generates Chromium policy JSON, Firefox policies, and the macOS `.mobileconfig`. Takes a site-list flag and an adult flag per browser. |
 | `browsers/dns.js` | Turns the family DNS filter on or off. Run by the installers, and every minute by the daemon (as a child process) while `blockAdult` is on. |
 | `browsers/extension/` | MV3 extension for Brave, Chrome, Edge and Chromium. |
-| `test/` | `insights.test.js`, `opendota.test.js`, `news.test.js`, `pages.test.js`, `videos.test.js`, `install.test.js` and `forum.test.js` (offline, safe to run anywhere) plus the CI-only `fake-steam.js`, `e2e.js` and `interactive.exp`. |
+| `test/` | `insights.test.js`, `opendota.test.js`, `news.test.js`, `pages.test.js`, `videos.test.js`, `install.test.js`, `forum.test.js` and `plan.test.js` (offline, safe to run anywhere) plus the CI-only `fake-steam.js`, `e2e.js` and `interactive.exp`. |
 
 Install locations: `/usr/local/focus-guard` (macOS), `/opt/focus-guard` (Linux), `C:\Program Files\FocusGuard` (Windows). Services: launchd `local.focusguard`, systemd `focus-guard`, scheduled tasks `FocusGuard` (SYSTEM) and `FocusGuardNotifier` (user).
 
@@ -96,6 +97,7 @@ node test/pages.test.js      # tab bar, Blocked sites and Settings tabs
 node test/videos.test.js     # YouTube search parsing and the Videos page, against a canned search page
 node test/install.test.js    # nothing that closes Steam or Dota by command line matches install.sh itself
 node test/forum.test.js      # forum search, inline comments, image proxy and the Forum page, offline
+node test/plan.test.js       # today's plan: parsing, the lock rule and the Plan page
 node browsers/dns.js status  # read-only; "on" and "off" change this machine's DNS
 for f in dota-limit/*.js browsers/*.js browsers/extension/*.js test/*.js; do node --check "$f" || echo "FAIL $f"; done
 bash -n install.sh
@@ -109,4 +111,4 @@ To try the installer's questions without installing anything, copy `install.sh`,
 - No em dashes anywhere: code, comments, docs or commit messages.
 - User-facing text (README, installer output, notifications) is plain language for a non-technical reader.
 - Commit messages have no `Co-Authored-By` or other trailers.
-- Per-machine files stay out of git: `config.json`, `state.json`, `history.json`, logs, caches like `news-cache.json` and `stats-url.txt` are gitignored, and `choices.json` only exists in the install folder.
+- Per-machine files stay out of git: `config.json`, `state.json`, `history.json`, logs, caches like `news-cache.json`, `plan.json` and `stats-url.txt` are gitignored, and `choices.json` only exists in the install folder.

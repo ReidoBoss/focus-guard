@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Today's plan</title>
+<script src="/topbar.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #0d0f13; --panel: #151920; --panel-2: #1b2029; --line: #262c37; --text: #e8eaee; --muted: #8a93a3; --accent: #f5b642; --win: #4ade80; --loss: #f87171; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-top: 16px; }
+  .banner { margin-top: 20px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); font-weight: 600; }
+  .banner.locked { color: var(--accent); border-color: #5a4520; }
+  .banner.open { color: var(--win); border-color: #22543a; }
+  .banner .note { font-weight: 400; }
+  .task { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--line); cursor: pointer; }
+  .task:first-child { border-top: 0; }
+  .task.sub { padding-left: 30px; }
+  .task input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--win); flex: none; }
+  .task .n { color: var(--muted); font: 500 13px/22px "JetBrains Mono", monospace; min-width: 22px; }
+  .task.done .t { color: var(--muted); text-decoration: line-through; }
+  .gate { margin: 4px 0; padding: 6px 0; border-top: 2px dashed var(--accent); color: var(--accent); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+  textarea { width: 100%; min-height: 260px; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: 500 14px/1.6 "JetBrains Mono", monospace; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  .row label { color: var(--muted); font-size: 14px; }
+  input[type=number] { width: 64px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; }
+  button { font: 600 14px/1 Inter, system-ui, sans-serif; padding: 10px 14px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer; }
+  button.main { background: var(--accent); border-color: var(--accent); color: #1a1205; }
+  button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  code { font: 500 13px/1.5 "JetBrains Mono", monospace; background: var(--panel-2); padding: 2px 6px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Today's plan</h1>
+  <div class="note" id="day"></div>
+  <div id="body"><div class="note">Loading...</div></div>
+</div>
+<script>
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const body = document.getElementById("body");
+  let plan = null;
+  let editing = false;
+  let problem = "";
+  let draft = null; // text being saved, kept if the save fails
+
+  // Back to the text the plan was written in, for editing.
+  function toText(tasks) {
+    let n = 0;
+    let m = 0;
+    return tasks.map((t) => (t.depth ? `    ${++m}. ${t.text}` : ((m = 0), `${++n}. ${t.text}`))).join("\n");
+  }
+
+  function banner(top, gate) {
+    const still = plan.allow.length ? `<div class="note">Still open: ${esc(plan.allow.join(", "))}.</div>` : "";
+    if (!plan.on) return `<div class="banner">The web lock is off, so this is just a checklist.
+      <div class="note">To lock the web each day until your first tasks are done, set <code>"planLock": true</code> in config.json and run the installer with <code>--yes</code>.</div></div>`;
+    if (!plan.locked) return `<div class="banner open">The web is open. Nice work.</div>`;
+    if (!top) return `<div class="banner locked">The web is locked. Write today's plan to start.${still}</div>`;
+    return `<div class="banner locked">The web is locked until ${gate === 1 ? "task 1 is" : `tasks 1 to ${gate} are`} done.${still}</div>`;
+  }
+
+  function render() {
+    const top = plan.tasks.filter((t) => !t.depth).length;
+    const gate = Math.min(plan.gate || top, top);
+    let html = banner(top, gate);
+    if (problem) html += `<div class="note" role="alert">${esc(problem)}</div>`;
+    if (editing || !top) {
+      html += `<div class="card">
+        <textarea id="text" aria-label="Today's tasks, one per line" placeholder="1. Gym&#10;2. Clean work room&#10;3. Clean my room&#10;4. Apply for jobs&#10;    1. Update resume">${esc(draft !== null ? draft : toText(plan.tasks))}</textarea>
+        <div class="row">
+          <label>Web opens after task <input id="gate" type="number" min="1" max="100" value="${plan.gate || 3}"></label>
+          <button class="main" id="save">Save plan</button>
+          ${top ? '<button id="cancel">Cancel</button>' : ""}
+        </div>
+        <div class="note">One task per line. Indent a line to make it part of the task above it. Lines without a number or bullet, like a title, are left out when the others have one.</div>
+      </div>`;
+    } else {
+      let n = 0;
+      let m = 0;
+      let rows = "";
+      const line = '<div class="gate">The web opens here</div>';
+      plan.tasks.forEach((t, i) => {
+        if (!t.depth && n === gate && plan.on) rows += line;
+        const num = t.depth ? ++m : ((m = 0), ++n);
+        rows += `<label class="task${t.depth ? " sub" : ""}${t.done ? " done" : ""}"><input type="checkbox" data-i="${i}"${t.done ? " checked" : ""}><span class="n">${num}.</span><span class="t">${esc(t.text)}</span></label>`;
+      });
+      if (n === gate && plan.on) rows += line;
+      html += `<div class="card">${rows}</div><div class="row"><button id="edit">Edit plan</button></div>`;
+    }
+    body.innerHTML = html;
+  }
+
+  async function send(ask) {
+    try {
+      const r = await fetch("/api/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(ask) });
+      if (!r.ok) throw new Error(r.status);
+      plan = await r.json();
+      problem = "";
+      return true;
+    } catch (e) {
+      problem = "Couldn't save. Is the Focus Guard service running?";
+      return false;
+    }
+  }
+
+  body.addEventListener("change", (e) => {
+    if (e.target.dataset.i !== undefined) send({ check: Number(e.target.dataset.i), done: e.target.checked }).then(render);
+  });
+  body.addEventListener("click", async (e) => {
+    if (e.target.id === "edit" || e.target.id === "cancel") {
+      editing = e.target.id === "edit";
+      draft = null;
+      render();
+    } else if (e.target.id === "save") {
+      draft = document.getElementById("text").value;
+      if (await send({ text: draft, gate: Number(document.getElementById("gate").value) })) {
+        editing = false;
+        draft = null;
+      }
+      render();
+    }
+  });
+
+  (async () => {
+    try {
+      plan = await (await fetch("/api/plan", { cache: "no-store" })).json();
+      document.getElementById("day").textContent = new Date(plan.day + "T12:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+      render();
+    } catch (e) {
+      body.innerHTML = '<div class="note">Couldn\'t reach the Focus Guard service.</div>';
+    }
+  })();
+</script>
+</body>
+</html>

@@ -100,7 +100,7 @@ What it can't stop: a VPN, iCloud Private Relay in Safari (it uses its own DNS, 
 
 ### One manual step: the extension
 
-Facebook is a single-page app: clicking **Home** inside Messages changes the page without a real page load, so a block list alone can't catch it. The extension sends you back to `/messages` when that happens. Browsers don't let installers add extensions, so do this once in each browser:
+Facebook is a single-page app: clicking **Home** inside Messages changes the page without a real page load, so a block list alone can't catch it. The extension sends you back to `/messages` when that happens. It also runs the [daily plan lock](#todays-plan). Browsers don't let installers add extensions, so do this once in each browser:
 
 1. Open the extensions page (`brave://extensions`, `chrome://extensions` or `edge://extensions`) and turn on **Developer mode**.
 2. Click **Load unpacked** and pick the folder the installer printed:
@@ -126,9 +126,21 @@ The links at the top of the page jump to each section.
 
 ### The app at http://focus
 
-Focus Guard's pages share one tab bar: **News**, **Forum**, **Videos**, **Dota** (the stats page), **Blocked sites** (what's blocked, in which browsers, and whether the adult website block is on) and **Settings** (your Dota limit and the installer command to change it). Blocked sites and Settings only show settings. Changing them still takes the installer and your password, so loosening a limit takes a moment to think about.
+Focus Guard's pages share one tab bar: **News**, **Plan**, **Forum**, **Videos**, **Dota** (the stats page), **Blocked sites** (what's blocked, in which browsers, and whether the adult website block is on) and **Settings** (your Dota limit and the installer command to change it). Blocked sites and Settings only show settings. Changing them still takes the installer and your password, so loosening a limit takes a moment to think about.
 
 The screenshots below show example results in a local preview using cached public posts and feeds.
+
+### Today's plan
+
+**http://focus/plan** is a checklist for the day. Paste your plan, one task per line (numbers, bullets and indented sub-tasks are fine; a title line is left out), and pick which task the web opens after. Tick tasks off as you finish them. A new plan starts each day at `resetHour`, keeping the task number you picked.
+
+To make it a real lock, set `"planLock": true` in `config.json` (see [Settings](#settings)). Then, until the first tasks are ticked:
+
+- Every website in a browser with the extension goes to the plan instead. The extension is needed for this; browsers without it aren't locked.
+- The other tabs at http://focus (News, Forum, Videos, Dota) go to the plan too.
+- Spotify stays open, in the browser (`planAllow` in `browsers/sites.json`) and as the desktop app, which isn't a browser.
+
+The checkboxes work on trust: ticking a task you didn't do opens the web.
 
 ### Forum
 
@@ -251,6 +263,7 @@ The easy way is to run the installer again and give different answers. You can a
 | `tiltCheck` | `true` | Notification after a loss. |
 | `parseReplays` | `true` | Ask OpenDota to parse replays for lane results and the gold graph. |
 | `weeklySummary` | `true` | Notification when a new week starts. |
+| `planLock` | `false` | `true` locks the web each day until the first tasks on [today's plan](#todays-plan) are done. |
 | `accountId` | from Steam | Your Dota account ID, used for the hero report and counter-picks. |
 
 The blocked and allowed sites are in `browsers/sites.json`. To change them, edit that file in a copy of this repo (`git clone https://github.com/ReidoBoss/focus-guard`) and run that copy's installer (`sudo bash install.sh`, or `.\install.ps1` as Administrator on Windows). Editing the copy in the install folder doesn't last, because every install replaces it. The **Blocked sites** tab at http://focus/blocked shows the list in use.
