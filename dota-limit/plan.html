@@ -60,7 +60,7 @@
   function banner(top, gate) {
     const still = plan.allow.length ? `<div class="note">Still open: ${esc(plan.allow.join(", "))}.</div>` : "";
     if (!plan.on) return `<div class="banner">The web lock is off, so this is just a checklist.
-      <div class="note">To lock the web each day until your first tasks are done, set <code>"planLock": true</code> in config.json and run the installer with <code>--yes</code>.</div></div>`;
+      <div class="note">To lock the web each day until your first tasks are done, run the installer again and answer <b>y</b> to the daily plan question.</div></div>`;
     if (!plan.locked) return `<div class="banner open">The web is open. Nice work.</div>`;
     if (!top) return `<div class="banner locked">The web is locked. Write today's plan to start.${still}</div>`;
     return `<div class="banner locked">The web is locked until ${gate === 1 ? "task 1 is" : `tasks 1 to ${gate} are`} done.${still}</div>`;

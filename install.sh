@@ -370,6 +370,16 @@ tell "DNS to Cloudflare's free family filter. Also turns on SafeSearch in Google
 if yesno "Block adult websites?" "$( [ "$PREV_ADULT" = true ] && echo y || echo n )"; then BLOCK_ADULT=true; fi
 ADULT01="$( [ "$BLOCK_ADULT" = true ] && echo 1 || echo 0 )"
 
+# Daily plan
+PLAN_LOCK=false
+# Before this question existed, the lock was turned on by hand in config.json.
+PREV_PLAN="$(prev planLock "$(grep -q '"planLock": true' "$DEST/dota-limit/config.json" 2>/dev/null && echo true || echo false)")"
+tell ""
+tell "$(bold "4. Daily plan")"
+tell "Each day, write your plan at http://focus/plan. Websites stay closed until the first tasks"
+tell "on it are ticked off (you pick how many). Spotify stays open. Needs the browser extension."
+if yesno "Lock the web each day until your first tasks are done?" "$( [ "$PREV_PLAN" = true ] && echo y || echo n )"; then PLAN_LOCK=true; fi
+
 # Summary
 names=""
 IFS=',' read -r -a picked <<< "$BROWSERS"
@@ -394,14 +404,15 @@ fi
 tell "  Website blocker:  ${names:-off}"
 if [ "$OS" = Darwin ]; then tell "  Safari:           $( [ "$BLOCK_SAFARI" = true ] && echo "blocked" || echo "left alone" )"; fi
 tell "  Adult websites:   $( [ "$BLOCK_ADULT" = true ] && echo "blocked" || echo "not blocked" )"
+tell "  Daily plan lock:  $( [ "$PLAN_LOCK" = true ] && echo "on" || echo "off" )"
 tell ""
 if [ "$INTERACTIVE" = 1 ] && ! yesno "Install with these settings?" y; then
   echo "Nothing changed."
   exit 0
 fi
 
-CHOICES="$("$NODE" -e 'const [d,m,g,wm,wg,h,b,s,a,o,t]=process.argv.slice(1);console.log(JSON.stringify({dotaEnabled:d==="true",mode:m,maxGames:Number(g),weekendMode:wm,weekendMaxGames:Number(wg),resetHour:Number(h),browsers:b,blockSafari:s==="true",blockAdult:a==="true",opendota:o==="true",tiltCheck:t==="true"}))' \
-  "$DOTA_ENABLED" "$MODE" "$MAX_GAMES" "$WEEKEND_MODE" "$WEEKEND_MAX" "$RESET_HOUR" "$BROWSERS" "$BLOCK_SAFARI" "$BLOCK_ADULT" "$OPENDOTA" "$TILT")"
+CHOICES="$("$NODE" -e 'const [d,m,g,wm,wg,h,b,s,a,o,t,p]=process.argv.slice(1);console.log(JSON.stringify({dotaEnabled:d==="true",mode:m,maxGames:Number(g),weekendMode:wm,weekendMaxGames:Number(wg),resetHour:Number(h),browsers:b,blockSafari:s==="true",blockAdult:a==="true",opendota:o==="true",tiltCheck:t==="true",planLock:p==="true"}))' \
+  "$DOTA_ENABLED" "$MODE" "$MAX_GAMES" "$WEEKEND_MODE" "$WEEKEND_MAX" "$RESET_HOUR" "$BROWSERS" "$BLOCK_SAFARI" "$BLOCK_ADULT" "$OPENDOTA" "$TILT" "$PLAN_LOCK")"
 
 # ---------------------------------------------------------------- files
 say "Installing to $DEST"

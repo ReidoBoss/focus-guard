@@ -24,13 +24,14 @@ const EXPECT = {
   blockSafari: process.env.FG_EXPECT_SAFARI === "1",
   opendota: process.env.FG_EXPECT_OPENDOTA !== "0",
   adult: process.env.FG_EXPECT_ADULT === "1",
+  planLock: process.env.FG_EXPECT_PLAN === "1",
 };
 const ALL_BROWSERS = IS_WIN || IS_MAC ? ["brave", "chrome", "edge", "firefox"] : ["brave", "chrome", "chromium", "edge", "firefox"];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function request(url, body) {
+function request(url, body, headers) {
   return new Promise((resolve, reject) => {
-    const req = http.request(url, { method: body ? "POST" : "GET", timeout: 5000 }, (res) => {
+    const req = http.request(url, { method: body ? "POST" : "GET", timeout: 5000, headers }, (res) => {
       let data = "";
       res.on("data", (c) => (data += c));
       res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
@@ -182,6 +183,16 @@ const gsi = (matchid, game_state, win_team) => ({
     return r.status === 302;
   }, 30);
   check(`site uses the focus address (${statsUrl})`, /^http:\/\/focus(:\d+)?\/$/.test(statsUrl));
+  // With the plan lock on, the tabs open only once today's first task is ticked.
+  const plan = JSON.parse((await request(`${statsUrl}api/plan`)).body);
+  check(`plan lock is ${EXPECT.planLock ? "on" : "off"}`, plan.on === EXPECT.planLock && plan.locked === EXPECT.planLock);
+  if (EXPECT.planLock) {
+    check("locked tabs go to the plan", (await request(`${statsUrl}dota`)).headers.location === "/plan");
+    const origin = { origin: statsUrl.slice(0, -1) };
+    await request(`${statsUrl}api/plan`, { text: "1. Test the installer", gate: 1 }, origin);
+    const ticked = JSON.parse((await request(`${statsUrl}api/plan`, { check: 0, done: true }, origin)).body);
+    check("ticking the first task opens the web", ticked.locked === false);
+  }
   await waitFor("stats page answers", async () => (await request(`${statsUrl}dota`)).body.includes("Dota Limiter"), 30);
   // Only the page itself: /api/news would fetch real feeds from CI.
   check("news page answers", (await request(statsUrl)).body.includes("<title>News</title>"));
@@ -198,7 +209,7 @@ const gsi = (matchid, game_state, win_team) => ({
 
   const config = JSON.parse(fs.readFileSync(path.join(DEST, "dota-limit", "config.json"), "utf8"));
   check(`config matches the installer answers (${config.mode}, ${config.maxGames} games, reset ${config.resetHour})`,
-    config.mode === EXPECT.mode && config.weekendMode === EXPECT.weekendMode && (config.weekendMode !== "games" || config.weekendMaxGames === EXPECT.weekendMaxGames) && config.resetHour === EXPECT.resetHour && (config.mode === "bo3" || config.maxGames === EXPECT.maxGames) && config.blockSafari === EXPECT.blockSafari && config.blockAdult === EXPECT.adult && config.opendota === EXPECT.opendota && config.tiltCheck === true);
+    config.mode === EXPECT.mode && config.weekendMode === EXPECT.weekendMode && (config.weekendMode !== "games" || config.weekendMaxGames === EXPECT.weekendMaxGames) && config.resetHour === EXPECT.resetHour && (config.mode === "bo3" || config.maxGames === EXPECT.maxGames) && config.blockSafari === EXPECT.blockSafari && config.blockAdult === EXPECT.adult && config.opendota === EXPECT.opendota && config.tiltCheck === true && config.planLock === EXPECT.planLock);
 
   checkBrowserPolicies();
   await checkAdultDns();

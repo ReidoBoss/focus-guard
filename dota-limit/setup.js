@@ -38,7 +38,7 @@ const DEFAULTS = {
 };
 
 // Installer answers that map straight onto config.json.
-const CHOICE_KEYS = ["dotaEnabled", "mode", "maxGames", "weekendMode", "weekendMaxGames", "resetHour", "blockSafari", "blockAdult", "opendota", "tiltCheck"];
+const CHOICE_KEYS = ["dotaEnabled", "mode", "maxGames", "weekendMode", "weekendMaxGames", "resetHour", "blockSafari", "blockAdult", "opendota", "tiltCheck", "planLock"];
 
 function windowsSteamPath() {
   try {

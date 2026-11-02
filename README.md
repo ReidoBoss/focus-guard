@@ -56,6 +56,9 @@ What should happen to Safari?          (macOS only)
 3. Adult websites
 Block adult websites? (y/n) [n]:
 
+4. Daily plan
+Lock the web each day until your first tasks are done? (y/n) [n]:
+
 Summary ... Install with these settings? (y/n) [y]:
 ```
 
@@ -134,7 +137,7 @@ The screenshots below show example results in a local preview using cached publi
 
 **http://focus/plan** is a checklist for the day. Paste your plan, one task per line (numbers, bullets and indented sub-tasks are fine; a title line is left out), and pick which task the web opens after. Tick tasks off as you finish them. A new plan starts each day at `resetHour`, keeping the task number you picked.
 
-To make it a real lock, set `"planLock": true` in `config.json` (see [Settings](#settings)). Then, until the first tasks are ticked:
+To make it a real lock, answer **y** to "Lock the web each day until your first tasks are done?" when you run the installer. Then, until the first tasks are ticked:
 
 - Every website in a browser with the extension goes to the plan instead. The extension is needed for this; browsers without it aren't locked.
 - The other tabs at http://focus (News, Forum, Videos, Dota) go to the plan too.
@@ -263,7 +266,7 @@ The easy way is to run the installer again and give different answers. You can a
 | `tiltCheck` | `true` | Notification after a loss. |
 | `parseReplays` | `true` | Ask OpenDota to parse replays for lane results and the gold graph. |
 | `weeklySummary` | `true` | Notification when a new week starts. |
-| `planLock` | `false` | `true` locks the web each day until the first tasks on [today's plan](#todays-plan) are done. |
+| `planLock` | `false` | The installer's daily plan question. `true` locks the web each day until the first tasks on [today's plan](#todays-plan) are done. |
 | `accountId` | from Steam | Your Dota account ID, used for the hero report and counter-picks. |
 
 The blocked and allowed sites are in `browsers/sites.json`. To change them, edit that file in a copy of this repo (`git clone https://github.com/ReidoBoss/focus-guard`) and run that copy's installer (`sudo bash install.sh`, or `.\install.ps1` as Administrator on Windows). Editing the copy in the install folder doesn't last, because every install replaces it. The **Blocked sites** tab at http://focus/blocked shows the list in use.

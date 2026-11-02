@@ -112,8 +112,8 @@ jobs:
         shell: powershell
         run: |
           $env:FG_INTERACTIVE = "1"
-          # Dota: yes, fixed games, 3 (default), weekends 7 games (default), bad hour then 5, no OpenDota, tilt check on. Browsers: pick Brave, Edge, Firefox. Block adult sites. Confirm.
-          "y`n2`n`ny`n2`n`nbanana`n5`nn`ny`n2`ny`nn`ny`ny`ny`ny`n" | powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
+          # Dota: yes, fixed games, 3 (default), weekends 7 games (default), bad hour then 5, no OpenDota, tilt check on. Browsers: pick Brave, Edge, Firefox. Block adult sites. Daily plan lock. Confirm.
+          "y`n2`n`ny`n2`n`nbanana`n5`nn`ny`n2`ny`nn`ny`ny`ny`ny`ny`n" | powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: End-to-end test with those answers
@@ -127,6 +127,7 @@ jobs:
           FG_EXPECT_SAFARI: ${{ runner.os == 'macOS' && '1' || '0' }}
           FG_EXPECT_OPENDOTA: "0"
           FG_EXPECT_ADULT: "1"
+          FG_EXPECT_PLAN: "1"
         run: node test/e2e.js
 
       - name: Uninstall, confirming the question (macOS / Linux)

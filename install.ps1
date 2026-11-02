@@ -331,6 +331,20 @@ if ($BlockAdult) { $Adult01 = "1" }
 
 if ($Interactive) {
     Write-Host ""
+    Bold "4. Daily plan"
+    Write-Host "Each day, write your plan at http://focus/plan. Websites stay closed until the first tasks"
+    Write-Host "on it are ticked off (you pick how many). Spotify stays open. Needs the browser extension."
+}
+# Before this question existed, the lock was turned on by hand in config.json.
+$planOld = $false
+$planConfig = Join-Path $Dest "dota-limit\config.json"
+if (Test-Path $planConfig) { $planOld = (Get-Content -Raw $planConfig) -match '"planLock": true' }
+$planDefault = "n"
+if (Prev "planLock" $planOld) { $planDefault = "y" }
+$PlanLock = YesNo "Lock the web each day until your first tasks are done?" $planDefault
+
+if ($Interactive) {
+    Write-Host ""
     Bold "Summary"
     if ($DotaEnabled) {
         if ($Mode -eq "bo3") { Write-Host "  Dota 2 limit:     best of 3, new day at ${ResetHour}:00" } else { Write-Host "  Dota 2 limit:     $MaxGames games, new day at ${ResetHour}:00" }
@@ -342,6 +356,7 @@ if ($Interactive) {
     }
     Write-Host "  Website blocker:  $names"
     if ($BlockAdult) { Write-Host "  Adult websites:   blocked" } else { Write-Host "  Adult websites:   not blocked" }
+    if ($PlanLock) { Write-Host "  Daily plan lock:  on" } else { Write-Host "  Daily plan lock:  off" }
     Write-Host ""
     if (-not (YesNo "Install with these settings?" "y")) {
         Write-Host "Nothing changed."
@@ -361,6 +376,7 @@ $Choices = [ordered]@{
     blockAdult  = $BlockAdult
     opendota    = $OpenDota
     tiltCheck   = $Tilt
+    planLock    = $PlanLock
 }
 $ChoicesJson = $Choices | ConvertTo-Json -Compress
 
