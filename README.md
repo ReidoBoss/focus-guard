@@ -270,6 +270,17 @@ The easy way is to run the installer again and give different answers. You can a
 | `weeklySummary` | `true` | Notification when a new week starts. |
 | `planLock` | `false` | The installer's daily plan question. `true` locks the web each day until the first tasks on [today's plan](#todays-plan) are done. |
 | `accountId` | from Steam | Your Dota account ID, used for the hero report and counter-picks. |
+| `syncUrl`, `syncToken` | none | Share the Dota and Plan tabs between your computers. See [Several computers](#several-computers). |
+
+### Several computers
+
+Each computer runs its own Focus Guard. To share the Dota and Plan tabs between them (so games on one count toward the limit on all, and the plan is the same everywhere), run the sync server on a machine they can all reach, ideally over a private network like Tailscale:
+
+```bash
+FG_SYNC_TOKEN=<a long random secret> node dota-limit/sync.js serve <address> 43299 /var/lib/focus-guard-sync.json
+```
+
+Then add `"syncUrl": "http://<address>:43299/"` and `"syncToken": "<the same secret>"` to `config.json` on each computer and run the installer with `--yes`. Matches are only ever added, never removed, and the newest plan edit wins. If the server can't be reached, each computer keeps going on its own and catches up later. All computers should use the same `resetHour` and time zone.
 
 The blocked and allowed sites are in `browsers/sites.json`. To change them, edit that file in a copy of this repo (`git clone https://github.com/ReidoBoss/focus-guard`) and run that copy's installer (`sudo bash install.sh`, or `.\install.ps1` as Administrator on Windows). Editing the copy in the install folder doesn't last, because every install replaces it. The **Blocked sites** tab at http://focus/blocked shows the list in use.
 

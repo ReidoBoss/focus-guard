@@ -28,11 +28,12 @@ Self-control tools installed with one command on macOS, Ubuntu and Windows:
 | `dota-limit/forum.js` | Search-only Forum reader at `/forum` (`forum.html`). Reads Reddit's public RSS search, community and comment feeds, Algolia's Hacker News search, and Lobsters' public search HTML and comment JSON. Reuses news feed helpers and comment parsing. Searches and comments cache for 10 minutes. Comment and image endpoints only accept posts from recent search results; the image endpoint only fetches fixed Reddit CDN hosts, supported raster types, up to 2 MB. No browser policy exceptions are added. |
 | `dota-limit/opendota.js` | After a match, fetches the scoreboard and each public player's profile from OpenDota. Requests go out one at a time, about 1.1 s apart, because the free tier allows 60 a minute. |
 | `dota-limit/plan.js` | Today's plan (`plan.html` at `/plan`): applies the page's changes (add, remove, tick, focus sites) and decides whether the web is locked. A started focus task locks everything but its own sites, even with `planLock` off; the daemon folds it into `/api/plan`'s `locked` and `allow`, so the extension needs no change. The daemon keeps it in `plan.json`, resets it at `resetHour`, and serves `/api/plan`. With `planLock` on, the daemon redirects its other tabs to `/plan` and the extension redirects every other site there, except `planAllow`. POSTs must come from an `http://focus` origin. |
+| `dota-limit/sync.js` | Shares the Dota and Plan tabs between machines. `serve` runs the server (one JSON file, bearer token); the daemon's `syncNow()` posts its days and plan every 30 s when `syncUrl` and `syncToken` are set, and merges the reply: matches are unioned by ID, the earliest `lockedAt` wins, the plan with the latest day then `updatedAt` wins. |
 | `browsers/sites.json` | Blocked and allowed sites, plus `planAllow` (open while the plan lock is on). The only list; every browser format is generated from it. |
 | `browsers/policies.js` | Generates Chromium policy JSON, Firefox policies, and the macOS `.mobileconfig`. Takes a site-list flag and an adult flag per browser. |
 | `browsers/dns.js` | Turns the family DNS filter on or off. Run by the installers, and every minute by the daemon (as a child process) while `blockAdult` is on. |
 | `browsers/extension/` | MV3 extension for Brave, Chrome, Edge and Chromium. |
-| `test/` | `insights.test.js`, `opendota.test.js`, `news.test.js`, `pages.test.js`, `videos.test.js`, `install.test.js`, `forum.test.js` and `plan.test.js` (offline, safe to run anywhere) plus the CI-only `fake-steam.js`, `e2e.js` and `interactive.exp`. |
+| `test/` | `insights.test.js`, `opendota.test.js`, `news.test.js`, `pages.test.js`, `videos.test.js`, `install.test.js`, `forum.test.js`, `plan.test.js` and `sync.test.js` (offline, safe to run anywhere) plus the CI-only `fake-steam.js`, `e2e.js` and `interactive.exp`. |
 
 Install locations: `/usr/local/focus-guard` (macOS), `/opt/focus-guard` (Linux), `C:\Program Files\FocusGuard` (Windows). Services: launchd `local.focusguard`, systemd `focus-guard`, scheduled tasks `FocusGuard` (SYSTEM) and `FocusGuardNotifier` (user).
 
@@ -98,6 +99,7 @@ node test/videos.test.js     # YouTube search parsing and the Videos page, again
 node test/install.test.js    # nothing that closes Steam or Dota by command line matches install.sh itself
 node test/forum.test.js      # forum search, inline comments, image proxy and the Forum page, offline
 node test/plan.test.js       # today's plan: parsing, the lock rule and the Plan page
+node test/sync.test.js       # sharing between machines: merge rules and a local server
 node browsers/dns.js status  # read-only; "on" and "off" change this machine's DNS
 for f in dota-limit/*.js browsers/*.js browsers/extension/*.js test/*.js; do node --check "$f" || echo "FAIL $f"; done
 bash -n install.sh

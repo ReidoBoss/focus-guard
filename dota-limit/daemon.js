@@ -12,6 +12,7 @@ const { createNews } = require("./news");
 const { createVideos } = require("./videos");
 const { createForum } = require("./forum");
 const plan = require("./plan");
+const { createSync, mergeDay, mergeDays, mergePlan } = require("./sync");
 
 const DIR = __dirname;
 const CONFIG = JSON.parse(fs.readFileSync(path.join(DIR, "config.json"), "utf8"));
@@ -759,8 +760,11 @@ const statsServer = http.createServer((req, res) => {
           res.writeHead(400);
           return res.end();
         }
-        fs.writeFileSync(PLAN_FILE, JSON.stringify(plan.apply(loadPlan(), ask), null, 2));
+        const changed = plan.apply(loadPlan(), ask);
+        changed.updatedAt = Date.now();
+        fs.writeFileSync(PLAN_FILE, JSON.stringify(changed, null, 2));
         json(planStatus());
+        syncNow();
       });
       return;
     }
@@ -890,6 +894,34 @@ if (DOTA_ENABLED) resumeLookups();
 if (DOTA_ENABLED && opendota) setTimeout(() => refreshReport(false), 20 * 1000);
 setInterval(tick, 5000);
 tick();
+
+// Shared Dota and Plan tabs: with syncUrl set, every machine adds its matches and plan edits
+// to one server and takes everyone else's, so the daily limit counts games from all of them.
+// Offline, each machine keeps going on its own copy.
+const syncer = CONFIG.syncUrl && CONFIG.syncToken ? createSync({ url: CONFIG.syncUrl, token: CONFIG.syncToken, log }) : null;
+function syncNow() {
+  if (!syncer) return;
+  rollover();
+  syncer([state].concat(loadHistory()), readJson(PLAN_FILE, null), (reply) => {
+    if (reply.days) {
+      const today = reply.days.filter((d) => d.day === state.day)[0];
+      const merged = mergeDay(state, today);
+      if (JSON.stringify(merged) !== JSON.stringify(state)) {
+        state = merged;
+        save();
+      }
+      const before = loadHistory();
+      const history = mergeDays(before, reply.days.filter((d) => d.day < state.day));
+      if (JSON.stringify(history) !== JSON.stringify(before)) fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+    }
+    const mine = readJson(PLAN_FILE, null);
+    if (reply.plan && mergePlan(mine, reply.plan) !== mine) fs.writeFileSync(PLAN_FILE, JSON.stringify(reply.plan, null, 2));
+  });
+}
+if (syncer) {
+  setInterval(syncNow, 30 * 1000);
+  syncNow();
+}
 
 // Adult website block: puts the family DNS filter back on a new network connection or
 // after a hand-made change. A separate process, since PowerShell is slow to start.
