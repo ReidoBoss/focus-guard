@@ -189,8 +189,8 @@ const gsi = (matchid, game_state, win_team) => ({
   if (EXPECT.planLock) {
     check("locked tabs go to the plan", (await request(`${statsUrl}dota`)).headers.location === "/plan");
     const origin = { origin: statsUrl.slice(0, -1) };
-    await request(`${statsUrl}api/plan`, { text: "1. Test the installer", gate: 1 }, origin);
-    const ticked = JSON.parse((await request(`${statsUrl}api/plan`, { check: 0, done: true }, origin)).body);
+    await request(`${statsUrl}api/plan`, { add: "Test the installer", gate: 1 }, origin);
+    const ticked = JSON.parse((await request(`${statsUrl}api/plan`, { task: 0, done: true }, origin)).body);
     check("ticking the first task opens the web", ticked.locked === false);
   }
   await waitFor("stats page answers", async () => (await request(`${statsUrl}dota`)).body.includes("Dota Limiter"), 30);
