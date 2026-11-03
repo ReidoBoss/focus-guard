@@ -1,4 +1,4 @@
-// Offline test for today's plan: parsing, the lock rule, and the Plan page in a fake DOM.
+// Offline test for today's plan: page changes and focus, the lock rule, and the Plan page in a fake DOM.
 // Run: node test/plan.test.js
 const fs = require("fs");
 const path = require("path");
@@ -6,42 +6,59 @@ const vm = require("vm");
 const assert = require("assert");
 const plan = require("../dota-limit/plan");
 
-// ---- parsing: the plan as it gets pasted, with a title and numbered sub-tasks
-const pasted = `Today’s Plan
-1. GYM
-2. Clean Work Room
-3. Clean Self Room
-4. Apply Jobs
-5. Improve RESUME
-6. Sprint 6 Aurora
-    1. Improve each AI plugins
-    2. Improve Claude.MD for each services and apps
-7. PRD for QAll
-8. PRD for Firma
-`;
-const tasks = plan.parse(pasted);
-assert.strictEqual(tasks.length, 10, "the title is left out");
-assert.deepStrictEqual(tasks[0], { text: "GYM", depth: 0, done: false });
-assert.deepStrictEqual(tasks[6], { text: "Improve each AI plugins", depth: 1, done: false });
-assert.strictEqual(tasks.filter((t) => !t.depth).length, 8);
-assert.deepStrictEqual(plan.parse("Gym\n\n  \nRead").map((t) => t.text), ["Gym", "Read"], "no markers: every line is a task");
-assert.deepStrictEqual(plan.parse("- a\n* b\n2) c\n1. ").map((t) => t.text), ["a", "b", "c"], "bullets, and empty items dropped");
-assert.strictEqual(plan.parse("x\n".repeat(500)).length, 100, "capped");
+// ---- changes from the page
+const fresh = () => ({ gate: 3, tasks: [] });
+let p = fresh();
+["Gym", "  Read  ", "", "Code"].forEach((add) => plan.apply(p, { add }));
+assert.deepStrictEqual(p.tasks.map((t) => t.text), ["Gym", "Read", "Code"], "trimmed, empty dropped");
+plan.apply(p, { task: 1, done: true });
+assert.strictEqual(p.tasks[1].done, true);
+plan.apply(p, { task: 1, remove: true });
+assert.deepStrictEqual(p.tasks.map((t) => t.text), ["Gym", "Code"]);
+plan.apply(p, { task: 9, done: true, remove: true });
+plan.apply(p, { task: "0", remove: true });
+assert.strictEqual(p.tasks.length, 2, "bad indexes do nothing");
+plan.apply(p, { gate: "0" });
+assert.strictEqual(p.gate, 1);
+for (let i = 0; i < 120; i++) plan.apply(p, { add: "x" });
+assert.strictEqual(p.tasks.length, 100, "capped");
 
-// Editing keeps the ticks on tasks that didn't change.
-const ticked = plan.parse("1. Gym\n2. Read", [{ text: "Gym", depth: 0, done: true }, { text: "Old", depth: 0, done: true }]);
-assert.deepStrictEqual(ticked.map((t) => t.done), [true, false]);
-console.log("ok: parsing");
+// Focus sites are cleaned up to domains.
+assert.strictEqual(plan.site("https://www.GitHub.com/foo?x=1"), "github.com");
+assert.strictEqual(plan.site("docs.google.com:443"), "docs.google.com");
+["", "localhost", "javascript:alert(1)", "a b.com", "<x>.com"].forEach((s) => assert.strictEqual(plan.site(s), null, s));
+p = fresh();
+plan.apply(p, { add: "Code" });
+plan.apply(p, { add: "Read" });
+plan.apply(p, { task: 0, sites: ["github.com", "", "www.github.com", "nope", 5] });
+assert.deepStrictEqual(p.tasks[0].sites, ["github.com"]);
+
+// Focus: one task at a time, only with sites, and ticking it off ends it.
+plan.apply(p, { task: 1, focus: true });
+assert.strictEqual(plan.focused(p), null, "no sites, no focus");
+plan.apply(p, { task: 0, focus: true });
+assert.strictEqual(plan.focused(p), p.tasks[0]);
+plan.apply(p, { task: 1, sites: ["wikipedia.org"] });
+plan.apply(p, { task: 1, focus: true });
+assert.strictEqual(plan.focused(p), p.tasks[1], "starting another stops the first");
+plan.apply(p, { task: 1, focus: false });
+assert.strictEqual(plan.focused(p), null);
+plan.apply(p, { task: 0, focus: true });
+plan.apply(p, { task: 0, done: true });
+assert.strictEqual(plan.focused(p), null, "done ends focus");
+plan.apply(p, { task: 1, focus: true });
+plan.apply(p, { task: 1, sites: [] });
+assert.strictEqual(plan.focused(p), null, "clearing the sites ends focus");
+console.log("ok: changes");
 
 // ---- the lock rule
-const day = (gate, done) => ({ gate, tasks: tasks.map((t, i) => Object.assign({}, t, { done: done.includes(i) })) });
+const day = (gate, done) => ({ gate, tasks: [0, 1, 2, 3, 4].map((i) => ({ text: "t" + i, done: done.includes(i) })) });
 assert.strictEqual(plan.locked({ gate: 3, tasks: [] }), true, "no plan yet: locked");
 assert.strictEqual(plan.locked(day(3, [0, 1])), true);
 assert.strictEqual(plan.locked(day(3, [0, 1, 2])), false, "tasks 1 to 3 done: open");
 assert.strictEqual(plan.locked(day(3, [0, 2, 3, 4])), true, "order doesn't matter, all of 1 to 3 do");
-assert.strictEqual(plan.locked(day(7, [0, 1, 2, 3, 4, 5, 8])), false, "sub-tasks don't count toward the gate");
-assert.strictEqual(plan.locked(day(50, [0, 1, 2, 3, 4, 5, 8, 9])), false, "a gate past the end means every task");
-assert.strictEqual(plan.locked(day(50, [0, 1, 2, 3, 4, 5, 8])), true);
+assert.strictEqual(plan.locked(day(50, [0, 1, 2, 3, 4])), false, "a gate past the end means every task");
+assert.strictEqual(plan.locked(day(50, [0, 1, 2, 3])), true);
 console.log("ok: lock rule");
 
 // ---- the Plan page
@@ -72,41 +89,57 @@ async function page(answer) {
 }
 
 (async () => {
-  const today = { day: "2026-11-03", gate: 3, tasks: tasks.map((t, i) => Object.assign({}, t, { done: i === 0 })), on: true, locked: true, allow: ["spotify.com"] };
-  today.tasks[1].text = "<b>Clean</b> Work Room";
+  const tasks = ["Gym", "<b>Clean</b> Work Room", "Clean Self Room", "Code"].map((text, i) => ({ text, done: i === 0, sites: [], focus: false }));
+  tasks[3].sites = ["github.com", "docs.google.com"];
+  const today = { day: "2026-11-03", gate: 3, tasks, on: true, gateLocked: true, locked: true, allow: ["spotify.com"] };
   let p = await page(today);
   let out = p.body();
   assert.ok(out.includes("locked until tasks 1 to 3 are done"), out);
   assert.ok(out.includes("Still open: spotify.com"));
   assert.ok(out.includes("&lt;b&gt;Clean&lt;/b&gt;") && !out.includes("<b>Clean"), "task text is escaped");
-  assert.ok(/Clean Self Room<\/span><\/label><div class="gate">/.test(out), "the line sits after task 3");
-  assert.strictEqual((out.match(/checked/g) || []).length, 1);
-  assert.ok(/<span class="n">1\.<\/span><span class="t">Improve each AI plugins/.test(out), "sub-tasks are numbered inside their task");
+  assert.ok(/Clean Self Room[\s\S]*?<div class="gate">[\s\S]*Code/.test(out), "the line sits after task 3");
+  assert.strictEqual((out.match(/ checked/g) || []).length, 1);
+  assert.ok(out.includes("Focus sites: github.com, docs.google.com"));
+  assert.strictEqual((out.match(/data-focus=/g) || []).length, 1, "Focus only on tasks with sites");
 
-  // Ticking a box posts its index.
+  // Ticking a box, adding, removing, focusing and saving sites post their changes.
   await p.listeners.change({ target: { dataset: { i: "2" }, checked: true } });
-  assert.deepStrictEqual(p.posts, [{ check: 2, done: true }]);
+  p.els.new = { value: "Read", focus() {} };
+  await p.listeners.submit({ preventDefault() {} });
+  await p.listeners.click({ target: { dataset: { remove: "1" } } });
+  await p.listeners.click({ target: { dataset: { focus: "3" }, textContent: "Focus" } });
+  await p.listeners.click({ target: { dataset: { sites: "0" } } });
+  assert.ok(p.body().includes('id="sites"'), "sites editor opens");
+  p.els.sites = { value: "github.com, wikipedia.org" };
+  await p.listeners.click({ target: { dataset: { saveSites: "0" } } });
+  await p.listeners.change({ target: { id: "gate", value: "2", dataset: {} } });
+  assert.deepStrictEqual(p.posts, [
+    { task: 2, done: true },
+    { add: "Read" },
+    { task: 1, remove: true },
+    { task: 3, focus: true },
+    { task: 0, sites: ["github.com", "wikipedia.org"] },
+    { gate: 2 },
+  ]);
 
-  // No plan yet: the form, with the last gate filled in.
-  p = await page(Object.assign({}, today, { tasks: [], gate: 4 }));
-  out = p.body();
-  assert.ok(out.includes("Write today's plan to start"));
-  assert.ok(out.includes('<textarea') && out.includes('value="4"'));
-  assert.ok(!out.includes("Cancel"), "nothing to go back to");
+  // A started focus task.
+  const focusing = JSON.parse(JSON.stringify(today));
+  focusing.tasks[3].focus = true;
+  focusing.allow = ["spotify.com", "github.com", "docs.google.com"];
+  out = (await page(focusing)).body();
+  assert.ok(out.includes("Focus: Code. Only github.com, docs.google.com are open."), out);
+  assert.ok(out.includes("Still open: spotify.com.") && out.includes(">Stop<"));
 
-  // Saving sends the text and the gate.
-  p.els.text = { value: "1. Gym" };
-  p.els.gate = { value: "2" };
-  await p.listeners.click({ target: { id: "save" } });
-  assert.deepStrictEqual(p.posts, [{ text: "1. Gym", gate: 2 }]);
+  // No plan yet.
+  out = (await page(Object.assign({}, today, { tasks: [] }))).body();
+  assert.ok(out.includes("Add today's tasks to start") && out.includes('id="addform"'));
 
-  // Lock off: just a checklist, no line.
-  p = await page(Object.assign({}, today, { on: false, locked: false }));
-  out = p.body();
-  assert.ok(out.includes("web lock is off") && !out.includes('class="gate"'));
+  // Lock off: just a checklist, no line, no gate box.
+  out = (await page(Object.assign({}, today, { on: false, gateLocked: false, locked: false }))).body();
+  assert.ok(out.includes("daily web lock is off") && !out.includes('class="gate"') && !out.includes('id="gate"'));
 
-  p = await page(Object.assign({}, today, { locked: false }));
-  assert.ok(p.body().includes("The web is open"));
+  out = (await page(Object.assign({}, today, { gateLocked: false, locked: false }))).body();
+  assert.ok(out.includes("The web is open"));
   console.log("ok: plan page");
 })().catch((e) => {
   console.error(e);

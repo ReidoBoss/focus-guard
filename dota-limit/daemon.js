@@ -657,8 +657,8 @@ const videos = createVideos();
 const forum = createForum({ blocked: SITES.block || [], log });
 
 // Today's plan. With planLock on, the web stays locked until its first `gate` tasks are
-// ticked: the other tabs here redirect to /plan, and so does every site in a browser with
-// the extension, except the sites in sites.json's planAllow (Spotify).
+// ticked, and a started focus task locks it too: the other tabs here redirect to /plan, and
+// so does every site in a browser with the extension, except planAllow (Spotify).
 const PLAN_FILE = path.join(DIR, "plan.json");
 const PLAN_OPEN = ["/plan", "/blocked", "/settings"];
 function loadPlan() {
@@ -666,9 +666,17 @@ function loadPlan() {
   if (p && p.day === dayKey()) return p;
   return { day: dayKey(), tasks: [], gate: (p && p.gate) || 3 };
 }
+// A started focus task closes everything but its own sites, with or without planLock.
+// `locked` and `allow` are what the extension reads.
 function planStatus() {
   const p = loadPlan();
-  return Object.assign(p, { on: PLAN_LOCK, locked: PLAN_LOCK && plan.locked(p), allow: SITES.planAllow || [] });
+  const focus = plan.focused(p);
+  return Object.assign(p, {
+    on: PLAN_LOCK,
+    gateLocked: PLAN_LOCK && plan.locked(p),
+    locked: !!focus || (PLAN_LOCK && plan.locked(p)),
+    allow: (SITES.planAllow || []).concat(focus ? focus.sites : []),
+  });
 }
 
 // What the Blocked sites and Settings tabs show: the settings the service is running with.
@@ -751,13 +759,7 @@ const statsServer = http.createServer((req, res) => {
           res.writeHead(400);
           return res.end();
         }
-        const p = loadPlan();
-        if (typeof ask.text === "string") {
-          p.tasks = plan.parse(ask.text, p.tasks);
-          p.gate = Math.max(1, Math.min(100, Math.floor(Number(ask.gate)) || 1));
-        }
-        if (Number.isInteger(ask.check) && p.tasks[ask.check]) p.tasks[ask.check].done = ask.done === true;
-        fs.writeFileSync(PLAN_FILE, JSON.stringify(p, null, 2));
+        fs.writeFileSync(PLAN_FILE, JSON.stringify(plan.apply(loadPlan(), ask), null, 2));
         json(planStatus());
       });
       return;
@@ -829,7 +831,7 @@ const statsServer = http.createServer((req, res) => {
       res.writeHead(302, { location: "/" });
       return res.end();
     }
-    if (PLAN_LOCK && !PLAN_OPEN.includes(url) && plan.locked(loadPlan())) {
+    if (!PLAN_OPEN.includes(url) && planStatus().locked) {
       res.writeHead(302, { location: "/plan" });
       return res.end();
     }

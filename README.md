@@ -135,9 +135,11 @@ The screenshots below show example results in a local preview using cached publi
 
 ### Today's plan
 
-**http://focus/plan** is a checklist for the day. Paste your plan, one task per line (numbers, bullets and indented sub-tasks are fine; a title line is left out), and pick which task the web opens after. Tick tasks off as you finish them. A new plan starts each day at `resetHour`, keeping the task number you picked.
+**http://focus/plan** is a checklist for the day. Add your tasks one at a time, and tick them off as you finish them. A new plan starts each day at `resetHour`.
 
-To make it a real lock, answer **y** to "Lock the web each day until your first tasks are done?" when you run the installer. Then, until the first tasks are ticked:
+**Focus on a task:** press **Sites** on a task and list the sites it needs (like `github.com, docs.google.com`). Then press **Focus** while you work on it: every other website goes to the plan until you tick the task off or press **Stop**. This works whether or not the daily lock below is on, and needs the extension, like the lock.
+
+To make the plan a daily lock, answer **y** to "Lock the web each day until your first tasks are done?" when you run the installer. Then pick which task the web opens after, and until those tasks are ticked:
 
 - Every website in a browser with the extension goes to the plan instead. The extension is needed for this; browsers without it aren't locked.
 - The other tabs at http://focus (News, Forum, Videos, Dota) go to the plan too.

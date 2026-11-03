@@ -19,20 +19,26 @@
   .banner.locked { color: var(--accent); border-color: #5a4520; }
   .banner.open { color: var(--win); border-color: #22543a; }
   .banner .note { font-weight: 400; }
-  .task { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--line); cursor: pointer; }
+  .task { display: flex; gap: 8px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--line); }
   .task:first-child { border-top: 0; }
-  .task.sub { padding-left: 30px; }
-  .task input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--win); flex: none; }
+  .task label { display: flex; gap: 10px; align-items: flex-start; flex: 1; min-width: 0; cursor: pointer; }
+  .task label input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--win); flex: none; }
+  .task .t { overflow-wrap: anywhere; }
+  .task .sites { display: block; color: var(--muted); font-size: 12px; }
+  .task.on { background: #1f1a0e; border-radius: 8px; }
+  .task button { padding: 6px 10px; font-size: 13px; }
+  .editor { display: flex; gap: 8px; padding: 0 0 10px 32px; }
+  input[type=text] { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; }
+  form.row input[type=text] { padding: 10px 12px; }
   .task .n { color: var(--muted); font: 500 13px/22px "JetBrains Mono", monospace; min-width: 22px; }
   .task.done .t { color: var(--muted); text-decoration: line-through; }
   .gate { margin: 4px 0; padding: 6px 0; border-top: 2px dashed var(--accent); color: var(--accent); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
-  textarea { width: 100%; min-height: 260px; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: 500 14px/1.6 "JetBrains Mono", monospace; }
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
   .row label { color: var(--muted); font-size: 14px; }
   input[type=number] { width: 64px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; }
   button { font: 600 14px/1 Inter, system-ui, sans-serif; padding: 10px 14px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer; }
   button.main { background: var(--accent); border-color: var(--accent); color: #1a1205; }
-  button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   code { font: 500 13px/1.5 "JetBrains Mono", monospace; background: var(--panel-2); padding: 2px 6px; border-radius: 6px; }
 </style>
 </head>
@@ -46,54 +52,52 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const body = document.getElementById("body");
   let plan = null;
-  let editing = false;
   let problem = "";
-  let draft = null; // text being saved, kept if the save fails
+  let editingSites = -1; // task whose focus sites are being edited
 
-  // Back to the text the plan was written in, for editing.
-  function toText(tasks) {
-    let n = 0;
-    let m = 0;
-    return tasks.map((t) => (t.depth ? `    ${++m}. ${t.text}` : ((m = 0), `${++n}. ${t.text}`))).join("\n");
-  }
+  const list = (a) => esc(a.join(", "));
 
-  function banner(top, gate) {
-    const still = plan.allow.length ? `<div class="note">Still open: ${esc(plan.allow.join(", "))}.</div>` : "";
-    if (!plan.on) return `<div class="banner">The web lock is off, so this is just a checklist.
+  function banner(focus) {
+    const allow = plan.allow.filter((s) => !focus || !focus.sites.includes(s));
+    const still = allow.length ? `<div class="note">Still open: ${list(allow)}.</div>` : "";
+    if (focus) return `<div class="banner locked">Focus: ${esc(focus.text)}. Only ${list(focus.sites)} ${focus.sites.length === 1 ? "is" : "are"} open.
+      ${still}<div class="note">Tick the task off or press Stop to end it.</div></div>`;
+    const top = plan.tasks.length;
+    const gate = Math.min(plan.gate || top, top);
+    if (!plan.on) return `<div class="banner">The daily web lock is off, so this is a checklist. Focus on a task still closes other sites.
       <div class="note">To lock the web each day until your first tasks are done, run the installer again and answer <b>y</b> to the daily plan question.</div></div>`;
-    if (!plan.locked) return `<div class="banner open">The web is open. Nice work.</div>`;
-    if (!top) return `<div class="banner locked">The web is locked. Write today's plan to start.${still}</div>`;
+    if (!plan.gateLocked) return `<div class="banner open">The web is open. Nice work.</div>`;
+    if (!top) return `<div class="banner locked">The web is locked. Add today's tasks to start.${still}</div>`;
     return `<div class="banner locked">The web is locked until ${gate === 1 ? "task 1 is" : `tasks 1 to ${gate} are`} done.${still}</div>`;
   }
 
   function render() {
-    const top = plan.tasks.filter((t) => !t.depth).length;
-    const gate = Math.min(plan.gate || top, top);
-    let html = banner(top, gate);
+    const focus = plan.tasks.filter((t) => t.focus && !t.done && (t.sites || []).length)[0];
+    const gate = Math.min(plan.gate || plan.tasks.length, plan.tasks.length);
+    const line = '<div class="gate">The web opens here</div>';
+    let html = banner(focus);
     if (problem) html += `<div class="note" role="alert">${esc(problem)}</div>`;
-    if (editing || !top) {
-      html += `<div class="card">
-        <textarea id="text" aria-label="Today's tasks, one per line" placeholder="1. Gym&#10;2. Clean work room&#10;3. Clean my room&#10;4. Apply for jobs&#10;    1. Update resume">${esc(draft !== null ? draft : toText(plan.tasks))}</textarea>
-        <div class="row">
-          <label>Web opens after task <input id="gate" type="number" min="1" max="100" value="${plan.gate || 3}"></label>
-          <button class="main" id="save">Save plan</button>
-          ${top ? '<button id="cancel">Cancel</button>' : ""}
-        </div>
-        <div class="note">One task per line. Indent a line to make it part of the task above it. Lines without a number or bullet, like a title, are left out when the others have one.</div>
+    let rows = "";
+    plan.tasks.forEach((t, i) => {
+      const sites = t.sites || [];
+      if (i === gate && plan.on) rows += line;
+      rows += `<div class="task${t.done ? " done" : ""}${t === focus ? " on" : ""}">
+        <label><input type="checkbox" data-i="${i}"${t.done ? " checked" : ""}><span class="n">${i + 1}.</span>
+          <span class="t">${esc(t.text)}${sites.length ? `<span class="sites">Focus sites: ${list(sites)}</span>` : ""}</span></label>
+        ${sites.length && !t.done ? `<button data-focus="${i}">${t === focus ? "Stop" : "Focus"}</button>` : ""}
+        <button data-sites="${i}">Sites</button>
+        <button data-remove="${i}" aria-label="Remove ${esc(t.text)}">&times;</button>
       </div>`;
-    } else {
-      let n = 0;
-      let m = 0;
-      let rows = "";
-      const line = '<div class="gate">The web opens here</div>';
-      plan.tasks.forEach((t, i) => {
-        if (!t.depth && n === gate && plan.on) rows += line;
-        const num = t.depth ? ++m : ((m = 0), ++n);
-        rows += `<label class="task${t.depth ? " sub" : ""}${t.done ? " done" : ""}"><input type="checkbox" data-i="${i}"${t.done ? " checked" : ""}><span class="n">${num}.</span><span class="t">${esc(t.text)}</span></label>`;
-      });
-      if (n === gate && plan.on) rows += line;
-      html += `<div class="card">${rows}</div><div class="row"><button id="edit">Edit plan</button></div>`;
-    }
+      if (i === editingSites) rows += `<div class="editor">
+        <input type="text" id="sites" aria-label="Sites open while focusing on this task" placeholder="github.com, docs.google.com" value="${list(sites)}">
+        <button class="main" data-save-sites="${i}">Save</button></div>`;
+    });
+    if (plan.tasks.length && gate === plan.tasks.length && plan.on) rows += line;
+    html += `<div class="card">${rows}
+      <form class="row" id="addform"><input type="text" id="new" aria-label="New task" placeholder="Add a task" maxlength="300"><button class="main">Add</button></form>
+      <div class="note">Sites: list the sites a task needs. Press Focus while you work on it, and every other site closes until you tick it off or press Stop.</div>
+    </div>
+    ${plan.on ? `<div class="row"><label>Web opens after task <input id="gate" type="number" min="1" max="100" value="${plan.gate || 3}"></label></div>` : ""}`;
     body.innerHTML = html;
   }
 
@@ -111,21 +115,28 @@
   }
 
   body.addEventListener("change", (e) => {
-    if (e.target.dataset.i !== undefined) send({ check: Number(e.target.dataset.i), done: e.target.checked }).then(render);
+    if (e.target.dataset && e.target.dataset.i !== undefined) send({ task: Number(e.target.dataset.i), done: e.target.checked }).then(render);
+    else if (e.target.id === "gate") send({ gate: Number(e.target.value) }).then(render);
+  });
+  body.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = document.getElementById("new").value;
+    if (!text.trim()) return;
+    await send({ add: text });
+    render();
+    document.getElementById("new").focus();
   });
   body.addEventListener("click", async (e) => {
-    if (e.target.id === "edit" || e.target.id === "cancel") {
-      editing = e.target.id === "edit";
-      draft = null;
-      render();
-    } else if (e.target.id === "save") {
-      draft = document.getElementById("text").value;
-      if (await send({ text: draft, gate: Number(document.getElementById("gate").value) })) {
-        editing = false;
-        draft = null;
-      }
-      render();
-    }
+    const d = e.target.dataset || {};
+    if (d.focus !== undefined) await send({ task: Number(d.focus), focus: e.target.textContent === "Focus" });
+    else if (d.remove !== undefined) {
+      await send({ task: Number(d.remove), remove: true });
+      editingSites = -1;
+    } else if (d.sites !== undefined) editingSites = editingSites === Number(d.sites) ? -1 : Number(d.sites);
+    else if (d.saveSites !== undefined) {
+      if (await send({ task: Number(d.saveSites), sites: document.getElementById("sites").value.split(/[\s,]+/) })) editingSites = -1;
+    } else return;
+    render();
   });
 
   (async () => {
